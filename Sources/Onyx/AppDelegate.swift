@@ -6,8 +6,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     lazy var registry = PaneRegistry(paths: paths)
     lazy var accounts = AccountStore(paths: paths, secrets: KeychainStore())
     var settings = Settings()
-    /// Env vars for the active accounts, computed once per account change.
+    /// Env vars for the active accounts, computed once per account change, and the GitHub
+    /// login they belong to (the label shown on panes made with them).
     private(set) var accountVars: [String: String] = [:]
+    private(set) var accountLogin: String?
+    private var refreshGate = RefreshGate()
     private var controllers: [WindowController] = []
     var windowControllers: [WindowController] { controllers }
     private var promptPath = ""
@@ -21,30 +24,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         newWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         log("window")
-        // Account env needs `gh` (and maybe the GitHub API): build it off the launch path;
-        // panes created meanwhile start their shell once it is ready.
-        let settings = self.settings, accounts = self.accounts
-        DispatchQueue.global(qos: .userInitiated).async {
-            var s = settings
-            let defaultLogin = s.activeGitHub == nil ? accounts.githubActiveLogin() : nil
-            if let defaultLogin { s.activeGitHub = defaultLogin }
-            let vars = SessionEnv.accountVars(settings: s, accounts: accounts)
-            DispatchQueue.main.async {
-                if let defaultLogin, self.settings.activeGitHub == nil {
-                    self.settings.activeGitHub = defaultLogin
-                    try? self.settings.save(self.paths)
-                }
-                self.accountsReady(vars)
-                self.log("first pane started")
-            }
-        }
+        refreshAccounts()
         DebugHooks.runScriptIfAny(self)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if DebugHooks.env["ONYX_SNAPSHOT"] != nil { return .terminateNow }
+        let busy = controllers.flatMap(\.panes).filter(\.isBusy).count
+        return busy == 0 || confirmClose(busy: busy) ? .terminateNow : .terminateCancel
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
-        controllers.forEach { $0.panes.forEach { $0.shutdown() } }
+        controllers.forEach { $0.panes.forEach { $0.shutdown(wait: true) } }
     }
 
     // MARK: Windows and panes
@@ -91,7 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     }
 
     private var pendingCommand: String?
-    /// nil until the launch-time account lookup finishes; panes made before then wait here.
+    /// Non-nil while account env is being (re)computed; panes made meanwhile wait here so they
+    /// never start with the previous account's token.
     private var waiting: [(PaneView, String)]? = []
 
     private func makePane(command defaultCommand: String) -> PaneView {
@@ -110,16 +104,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     private func start(_ pane: PaneView, _ command: String) {
         let env = SessionEnv.build(base: ProcessInfo.processInfo.environment, accountVars: accountVars,
                                    paneId: pane.id, binDir: binDir)
-        pane.start(command: command, env: env, accountLabel: accountVars["GH_TOKEN"] != nil ? settings.activeGitHub : nil)
+        pane.start(command: command, env: env, accountLabel: accountVars["GH_TOKEN"] != nil ? accountLogin : nil)
     }
 
-    private func accountsReady(_ vars: [String: String]) {
-        accountVars = vars
-        cacheIdentity()
+    private func startWaitingPanes() {
         let queued = waiting ?? []
         waiting = nil
         queued.forEach { start($0.0, $0.1) }
-        NotificationCenter.default.post(name: .onyxAccountsChanged, object: nil)
     }
 
     func windowControllerDidClose(_ controller: WindowController) {
@@ -139,16 +130,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     // MARK: Accounts
 
-    /// Recomputes account env off the main thread (gh + maybe the GitHub API), then notifies.
+    /// Recomputes account env off the main thread (gh, maybe the GitHub API). New panes wait for
+    /// it; only the newest of overlapping refreshes is applied.
     func refreshAccounts() {
+        let token = refreshGate.begin()
+        if waiting == nil { waiting = [] }
         let settings = self.settings, accounts = self.accounts
         DispatchQueue.global(qos: .userInitiated).async {
-            let vars = SessionEnv.accountVars(settings: settings, accounts: accounts)
+            var s = settings
+            let defaultLogin = s.activeGitHub == nil ? accounts.githubActiveLogin() : nil
+            if let defaultLogin { s.activeGitHub = defaultLogin }
+            let vars = SessionEnv.accountVars(settings: s, accounts: accounts)
             DispatchQueue.main.async {
+                guard self.refreshGate.accept(token) else { return }
+                if let defaultLogin, self.settings.activeGitHub == nil {
+                    self.settings.activeGitHub = defaultLogin
+                    try? self.settings.save(self.paths)
+                }
                 self.accountVars = vars
+                self.accountLogin = s.activeGitHub
                 self.cacheIdentity()
+                self.startWaitingPanes()
+                self.log("accounts ready")
                 NotificationCenter.default.post(name: .onyxAccountsChanged, object: nil)
             }
+        }
+        // If gh hangs (offline, keychain prompt), don't leave terminals blank: start them without
+        // account env after a few seconds; the refresh still lands for later panes.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            guard self.refreshGate.isRefreshing, self.waiting?.isEmpty == false else { return }
+            self.startWaitingPanes()
         }
         NotificationCenter.default.post(name: .onyxAccountsChanged, object: nil)
     }
@@ -197,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     /// Remembers the API-reported commit identity so later launches skip the network call.
     private func cacheIdentity() {
-        guard let login = settings.activeGitHub, settings.identities[login] == nil,
+        guard let login = accountLogin, settings.identities[login] == nil,
               let name = accountVars["GIT_AUTHOR_NAME"], let email = accountVars["GIT_AUTHOR_EMAIL"] else { return }
         settings.identities[login] = GitHubIdentity(login: login, name: name, email: email)
         try? settings.save(paths)

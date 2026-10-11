@@ -167,19 +167,45 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
 
     // MARK: PaneViewDelegate
 
-    func paneWantsClose(_ pane: PaneView) { close(pane) }
+    func paneWantsClose(_ pane: PaneView) { userClose(pane) }
+
+    func paneProcessEnded(_ pane: PaneView) { close(pane) }
+
+    /// Close requested by the user: ask first if Claude (or anything) is still running there.
+    func userClose(_ pane: PaneView) {
+        if pane.isBusy, !confirmClose(busy: 1) { return }
+        close(pane)
+    }
 
     // MARK: Menu actions (first-responder chain)
 
     @objc func closePane(_ sender: Any?) {
-        if let pane = focused ?? panes.last { close(pane) }
+        if let pane = focused ?? panes.last { userClose(pane) }
     }
 
     // MARK: NSWindowDelegate
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        let busy = panes.filter(\.isBusy).count
+        return busy == 0 || confirmClose(busy: busy)
+    }
+
     func windowWillClose(_ notification: Notification) {
-        panes.forEach { $0.shutdown() }
+        panes.forEach { $0.shutdown(wait: true) }
         panes.removeAll()
         host?.windowControllerDidClose(self)
     }
+}
+
+/// "Claude is still running" confirmation. True means go ahead and close.
+@MainActor
+func confirmClose(busy: Int) -> Bool {
+    let alert = NSAlert()
+    alert.messageText = busy == 1 ? "Close this terminal?" : "Close \(busy) busy terminals?"
+    alert.informativeText = busy == 1
+        ? "Something is still running in it (likely Claude). Closing ends it."
+        : "Something is still running in them (likely Claude). Closing ends it."
+    alert.addButton(withTitle: "Close")
+    alert.addButton(withTitle: "Cancel")
+    return alert.runModal() == .alertFirstButtonReturn
 }

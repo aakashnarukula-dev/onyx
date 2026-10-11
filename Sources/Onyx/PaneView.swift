@@ -4,6 +4,7 @@ import SwiftTerm
 
 @MainActor protocol PaneViewDelegate: AnyObject {
     func paneWantsClose(_ pane: PaneView)
+    func paneProcessEnded(_ pane: PaneView)
 }
 
 /// One independent terminal: a thin header (title, account, close) over a SwiftTerm view.
@@ -82,12 +83,41 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
 
     func requestClose() { delegate?.paneWantsClose(self) }
 
-    /// Ends the shell (and Claude with it: closing the PTY hangs up the session).
-    func shutdown() {
+    /// True while something other than the bare shell runs in the pane (Claude, a build, …).
+    var isBusy: Bool {
+        guard !closed, terminal.process.running else { return false }
+        return !childPids(of: terminal.process.shellPid).isEmpty
+    }
+
+    /// Ends the shell and everything under it. Interactive zsh ignores SIGTERM, so hang up the
+    /// children and the shell, reap the shell (SwiftTerm stops watching it on terminate), and
+    /// SIGKILL whatever is left after a grace period. `wait` blocks (used on quit, when a
+    /// background reaper would die with the app).
+    func shutdown(wait: Bool = false) {
         guard !closed else { return }
         closed = true
         registry.markClosed(paneId: id)
-        if terminal.process.running { terminal.process.terminate() }
+        let shell = terminal.process.shellPid
+        guard terminal.process.running, shell > 0 else { return }
+        let children = childPids(of: shell)
+        children.forEach { kill($0, SIGHUP); kill($0, SIGTERM) }
+        kill(shell, SIGHUP)
+        terminal.process.terminate()
+        let reap = { @Sendable in
+            let deadline = Date().addingTimeInterval(wait ? 1.5 : 2)
+            var status: Int32 = 0
+            func gone(_ p: pid_t) -> Bool { kill(p, 0) != 0 }
+            while !(waitpid(shell, &status, WNOHANG) != 0 && children.allSatisfy(gone)) {
+                if Date() > deadline {
+                    children.forEach { kill($0, SIGKILL) }
+                    kill(shell, SIGKILL)
+                    waitpid(shell, &status, 0)
+                    return
+                }
+                usleep(20_000)
+            }
+        }
+        if wait { reap() } else { DispatchQueue.global(qos: .utility).async(execute: reap) }
     }
 
     private func updateFocusLook() {
@@ -111,9 +141,17 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.closed else { return }
-            self.requestClose()
+            self.delegate?.paneProcessEnded(self)
         }
     }
+}
+
+/// Direct children of `pid`.
+func childPids(of pid: pid_t) -> [pid_t] {
+    guard pid > 0 else { return [] }
+    var buf = [pid_t](repeating: 0, count: 64)
+    let n = proc_listchildpids(pid, &buf, Int32(buf.count * MemoryLayout<pid_t>.size))
+    return n > 0 ? Array(buf.prefix(Int(n))).filter { $0 > 0 } : []
 }
 
 /// The 24 pt strip above each terminal.

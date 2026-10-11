@@ -1,4 +1,5 @@
 import AppKit
+import OnyxCore
 
 /// Test hooks, inert unless their env vars are set:
 /// - `ONYX_PANE_COMMAND`: run this instead of Claude in every pane.
@@ -79,7 +80,9 @@ extension AppDelegate {
                 return "[\(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height))]"
             }.joined(separator: " ")
             print("snapshot step \(step) window \(w): \(c.panes.count) panes \(summary)")
-            for (i, p) in c.panes.enumerated() { print("  pane \(i): \(p.visibleText().suffix(4))") }
+            for (i, p) in c.panes.enumerated() { print("  pane \(i) busy=\(p.isBusy): \(p.visibleText().suffix(2))") }
+            let claudes = Shell.run("/usr/bin/pgrep", ["-f", "append-system-prompt-file \(paths.prompt.path)"]).out
+            print("  claude processes: \(claudes.split(separator: "\n").count)")
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/\(step)-\(w).png"))
         }
     }

@@ -29,7 +29,8 @@ Click the chip at the top right (`● gh: … · ▲ …`).
 - **Vercel:** add a label and a token from vercel.com/account/tokens. Tokens live in the
   Keychain; the active one becomes `VERCEL_TOKEN`.
 
-Changes apply to new terminals; open ones keep theirs.
+Changes apply to new terminals; open ones keep theirs. Closing a terminal, window or the
+app asks first while Claude (or anything else) is still running in it.
 
 ## Same-repo safety: `onyx-pane`
 
@@ -38,13 +39,15 @@ Each Claude session is told to use this helper (it is on `PATH` in every termina
 ```
 onyx-pane claim <dir> "<task>"   OK <root>  |  USE_WORKTREE <path> <branch>
 onyx-pane who [<dir>]            panes in the repo and their tasks
-onyx-pane push                   one pane at a time: fetch, rebase, push
-                                 PUSHED <sha> | CONFLICT <files> | NO_REMOTE
-onyx-pane release                drops the claim; removes a merged worktree
+onyx-pane push [<dir>]           one pane at a time: fetch, rebase, push
+                                 PUSHED <sha> [STASHED] | CONFLICT <files> | NO_REMOTE
+onyx-pane release [<dir>]        drops the claim; removes a merged, clean worktree
 ```
 
 The first terminal in a repo works in the main checkout; later ones get a worktree under
-`.onyx-worktrees/` (git-excluded) and push straight to the default branch. Conflicts are
+`.onyx-worktrees/` (git-excluded), branched from the remote's default branch (never from
+another pane's unpushed work), and push straight to that branch. A pane can hold claims in
+several repos; `push`/`release` act on the repo you run them in. Conflicts are
 resolved by Claude keeping both sides' intent; judgment calls go to you.
 
 State lives in `~/Library/Application Support/Onyx` (`settings.json`, `panes/`, `locks/`,

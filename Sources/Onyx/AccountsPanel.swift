@@ -58,7 +58,8 @@ final class AccountsPanel: NSView {
         }
         stack.addArrangedSubview(linkButton("+ Add GitHub account") { [weak self] in
             self?.window?.close()
-            self?.app.openPane(running: "gh auth login --hostname github.com --git-protocol https --web")
+            // gh refuses to log in while GH_TOKEN is set, and panes carry the active account's.
+            self?.app.openPane(running: "env -u GH_TOKEN -u GITHUB_TOKEN gh auth login --hostname github.com --git-protocol https --web")
         })
 
         stack.addArrangedSubview(spacer(8))
@@ -263,12 +264,13 @@ final class AccountsChip: NSButton {
     @objc func refresh() {
         let s = app.settings
         let hasGitHub = app.accountVars["GH_TOKEN"] != nil
+        let login = app.accountLogin
         let text = NSMutableAttributedString()
         func add(_ str: String, _ color: NSColor) {
             text.append(NSAttributedString(string: str, attributes: [.foregroundColor: color, .font: Theme.ui(11, .medium)]))
         }
         add("● ", hasGitHub ? Theme.accent : Theme.danger)
-        add("gh: \(hasGitHub ? (s.activeGitHub ?? "none") : "none")", hasGitHub ? Theme.headerText : Theme.danger)
+        add("gh: \(hasGitHub ? (login ?? "none") : "none")", hasGitHub ? Theme.headerText : Theme.danger)
         add("  ·  ▲ ", Theme.muted)
         add(app.accountVars["VERCEL_TOKEN"] != nil ? (s.activeVercel ?? "none") : "none", Theme.headerText)
         attributedTitle = text
