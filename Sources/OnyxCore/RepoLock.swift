@@ -1,43 +1,32 @@
-import CryptoKit
 import Foundation
 
-/// Cross-process per-repo lock: an atomic `mkdir` of `locks/<hash>` holding the owner's pid.
-/// A lock whose owner is dead is stolen.
-public struct RepoLock: Sendable {
-    let dir: URL
-    let pid: Int32
-    let isAlive: @Sendable (Int32) -> Bool
+/// Cross-process per-repo lock: `flock` on `locks/<repoKey>.lock`. The kernel drops it when the
+/// holder exits or is killed, so a crashed push can never wedge the repo.
+public final class RepoLock: @unchecked Sendable {
+    public let file: URL
+    private var fd: Int32 = -1
 
-    public init(paths: OnyxPaths, repoRoot: String, pid: Int32 = getpid(),
-                isAlive: @escaping @Sendable (Int32) -> Bool = isProcessAlive) {
-        let digest = SHA256.hash(data: Data(repoRoot.utf8)).map { String(format: "%02x", $0) }.joined()
-        dir = paths.locks.appendingPathComponent(String(digest.prefix(16)))
-        self.pid = pid
-        self.isAlive = isAlive
+    public init(paths: OnyxPaths, repoRoot: String) {
+        file = paths.locks.appendingPathComponent("\(repoKey(repoRoot)).lock")
     }
 
-    private var pidFile: URL { dir.appendingPathComponent("pid") }
+    deinit { release() }
 
-    public func acquire(timeout: TimeInterval = 300, poll: TimeInterval = 0.2) throws {
-        try FileManager.default.createDirectory(at: dir.deletingLastPathComponent(), withIntermediateDirectories: true)
+    public func acquire(timeout: TimeInterval = 90, poll: TimeInterval = 0.2) throws {
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if fd < 0 { fd = open(file.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644) }
+        guard fd >= 0 else { throw OnyxError.git("cannot open lock \(file.path)") }
         let deadline = Date().addingTimeInterval(timeout)
-        while true {
-            if mkdir(dir.path, 0o755) == 0 {
-                try String(pid).write(to: pidFile, atomically: true, encoding: .utf8)
-                return
-            }
-            let holder = (try? String(contentsOf: pidFile, encoding: .utf8)).flatMap { Int32($0) }
-            // No pid yet means the holder is between mkdir and write; give it a moment.
-            if let holder, !isAlive(holder) {
-                try? FileManager.default.removeItem(at: dir)
-                continue
-            }
+        while flock(fd, LOCK_EX | LOCK_NB) != 0 {
             if Date() >= deadline { throw OnyxError.lockTimeout }
             Thread.sleep(forTimeInterval: poll)
         }
     }
 
     public func release() {
-        try? FileManager.default.removeItem(at: dir)
+        guard fd >= 0 else { return }
+        flock(fd, LOCK_UN)
+        close(fd)
+        fd = -1
     }
 }

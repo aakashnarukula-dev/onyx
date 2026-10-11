@@ -34,11 +34,12 @@ public enum SessionEnv {
         if let login = settings.activeGitHub, let token = accounts.githubToken(login) {
             let id = accounts.githubIdentity(login, token: token)
             env["GH_TOKEN"] = token
-            if let name = id.name {
+            // Git refuses an empty ident, so blank fields fall back to the user's git config.
+            if let name = id.name?.trimmingCharacters(in: .whitespaces), !name.isEmpty {
                 env["GIT_AUTHOR_NAME"] = name
                 env["GIT_COMMITTER_NAME"] = name
             }
-            if let email = id.email {
+            if let email = id.email?.trimmingCharacters(in: .whitespaces), !email.isEmpty {
                 env["GIT_AUTHOR_EMAIL"] = email
                 env["GIT_COMMITTER_EMAIL"] = email
             }

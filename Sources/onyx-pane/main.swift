@@ -7,8 +7,8 @@ import OnyxCore
 let usage = """
 usage: onyx-pane claim <dir> "<task>"   register this pane in a repo (may assign a worktree)
        onyx-pane who [<dir>]            list panes working in the repo
-       onyx-pane push                   rebase onto the latest remote and push (one pane at a time)
-       onyx-pane release                drop this pane's claim; remove its worktree once merged
+       onyx-pane push [<dir>]           rebase onto the latest remote and push (one pane at a time)
+       onyx-pane release [<dir>]        drop this pane's claim; remove its worktree once merged
 """
 
 func fail(_ msg: String, _ code: Int32 = 3) -> Never {
@@ -36,11 +36,11 @@ do {
         let out = try commands.who(dir: args.first ?? cwd)
         print(out.isEmpty ? "(no panes)" : out)
     case "push":
-        let r = try commands.push()
+        let r = try commands.push(dir: args.first ?? cwd)
         print(r.output)
         exit(r.exitCode)
     case "release":
-        print(try commands.release())
+        print(try commands.release(dir: args.first ?? cwd))
     default:
         print(usage)
         exit(64)

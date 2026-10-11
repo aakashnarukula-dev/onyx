@@ -13,9 +13,11 @@ final class MemorySecrets: SecretStore, @unchecked Sendable {
 final class FakeRunner: @unchecked Sendable {
     var replies: [String: (Int32, String, String)] = [:]
     var calls: [String] = []
+    var envs: [[String: String]?] = []
     func run(_ path: String, _ args: [String], _ env: [String: String]?) -> (status: Int32, out: String, err: String) {
         let key = ([URL(fileURLWithPath: path).lastPathComponent] + args).joined(separator: " ")
         calls.append(key)
+        envs.append(env)
         let r = replies[key] ?? (1, "", "no fake for \(key)")
         return (r.0, r.1, r.2)
     }
@@ -74,9 +76,11 @@ struct AccountStoreTests {
 
     @Test func validateVercel() {
         let r = FakeRunner()
-        r.replies["vercel whoami --token good"] = (0, "Vercel CLI 59\nfoo-user", "")
+        r.replies["vercel whoami"] = (0, "Vercel CLI 59\nfoo-user", "")
         #expect(store(r).validateVercel(token: "good") == "foo-user")
-        #expect(store(r).validateVercel(token: "bad") == nil)
+        // The token travels in the environment, never on argv (visible in `ps`).
+        #expect(r.envs.last??["VERCEL_TOKEN"] == "good")
+        #expect(!r.calls.contains { $0.contains("good") })
     }
 
     @Test func settingsCorruptFileDefaults() throws {

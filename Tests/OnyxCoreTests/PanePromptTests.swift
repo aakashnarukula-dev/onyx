@@ -5,7 +5,7 @@ import Testing
 struct PanePromptTests {
     @Test func containsTheRules() {
         for needle in ["onyx-pane claim", "USE_WORKTREE", "onyx-pane push", "never `git push --force`",
-                       "CONFLICT", "onyx-pane release", "CLAUDE.md"] {
+                       "CONFLICT", "onyx-pane release", "CLAUDE.md", "STASHED", "git stash pop", "RELEASED removed-worktree <root>"] {
             #expect(PanePrompt.text.contains(needle), "missing \(needle)")
         }
     }

@@ -25,4 +25,15 @@ public enum OnyxError: Error, Equatable {
     case git(String)
 }
 
-@Sendable public func isProcessAlive(_ pid: Int32) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
+/// True if `pid` names a running process. 0 and negatives are process groups, never a pane.
+@Sendable public func isProcessAlive(_ pid: Int32) -> Bool { pid > 0 && (kill(pid, 0) == 0 || errno == EPERM) }
+
+/// Start time (µs since epoch) of a running process, nil if there is none. Paired with the pid it
+/// identifies a process even after the pid number is reused.
+@Sendable public func processStartTime(_ pid: Int32) -> UInt64? {
+    guard pid > 0 else { return nil }
+    var info = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+    return info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec
+}

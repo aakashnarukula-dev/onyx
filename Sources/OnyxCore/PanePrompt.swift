@@ -12,14 +12,19 @@ public enum PanePrompt {
        - `USE_WORKTREE <path> <branch>` means another pane is already working in this repo. `cd` to
          <path> and do all of your work there, on <branch>. Never edit the main checkout in that case.
        Use `onyx-pane who <dir>` to see which panes are in a repo and what they are doing.
+       Claim each repo you touch; run `push` and `release` from inside the repo (or worktree) they are for.
     2. Always push with `onyx-pane push`; never `git push --force`, and never plain `git push`.
        It serializes pushes per repo and rebases onto the latest remote first.
     3. If `onyx-pane push` prints `CONFLICT <files>`, the rebase stopped in place. Resolve each file
        keeping the intent of BOTH sides, `git add` it, `git rebase --continue`, run the project's
        tests, then run `onyx-pane push` again. If the right resolution is a judgment call (both sides
        changed the same logic in different ways), stop and ask the user before continuing.
+       `PUSHED <sha> STASHED` means the push worked but your uncommitted edits could not be re-applied
+       and are in the stash: run `git stash pop` and resolve any conflicts it reports.
        `NO_REMOTE` means the repo has no origin; tell the user the branch is ready to merge.
-    4. When your task is done and pushed, run `onyx-pane release`.
+    4. When your task is done and pushed, run `onyx-pane release`. On
+       `RELEASED removed-worktree <root>` your worktree is gone: `cd <root>` before anything else.
+       `RELEASED kept-worktree <path> dirty` means uncommitted work is still there; tell the user.
     5. The repository's own CLAUDE.md rules (for example ship or deploy scripts) win over these
        generic push steps when they conflict.
     """

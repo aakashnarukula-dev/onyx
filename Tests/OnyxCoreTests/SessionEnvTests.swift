@@ -67,3 +67,18 @@ struct SessionEnvScrubTests {
         #expect(env["KEEP"] == "1")
     }
 }
+
+struct IdentityEdgeTests {
+    @Test func emptyIdentityFieldsAreSkipped() throws {
+        let paths = tempPaths()
+        var s = Settings()
+        s.activeGitHub = "foo"
+        s.identities["foo"] = GitHubIdentity(login: "foo", name: "", email: " ")
+        try s.save(paths)
+        let r = FakeRunner()
+        r.replies["gh auth token -u foo"] = (0, "tok", "")
+        let vars = SessionEnv.accountVars(settings: s, accounts: AccountStore(paths: paths, secrets: MemorySecrets(), run: r.run))
+        #expect(vars["GH_TOKEN"] == "tok")
+        #expect(vars["GIT_AUTHOR_NAME"] == nil && vars["GIT_AUTHOR_EMAIL"] == nil)
+    }
+}

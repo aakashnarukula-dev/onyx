@@ -104,7 +104,10 @@ public struct AccountStore: Sendable {
 
     /// Vercel username for a token, or nil if Vercel rejects it.
     public func validateVercel(token: String) -> String? {
-        let r = run(vercel, ["whoami", "--token", token], nil)
+        // Token via env, not argv: argv is readable by every user through `ps`.
+        var env = ProcessInfo.processInfo.environment
+        env["VERCEL_TOKEN"] = token
+        let r = run(vercel, ["whoami"], env)
         guard r.status == 0 else { return nil }
         return r.out.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.last { !$0.isEmpty }
     }
