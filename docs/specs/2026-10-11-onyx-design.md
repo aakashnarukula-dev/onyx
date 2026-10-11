@@ -1,5 +1,11 @@
 # Onyx — design spec
 
+> **Scope change (owner, 2026-10-11):** Onyx is plain terminals grouped in one window, each
+> starting Claude in auto mode — nothing else. The accounts chip (§6), same-repo safety /
+> `onyx-pane` (§7) and the pane system prompt were built and then removed. Panes use the
+> user's own shell, environment and logins exactly like Terminal.app. Sections 6–7 are kept
+> for history only.
+
 Date: 2026-10-11 · Status: draft, awaiting owner review
 
 ## 1. Intent

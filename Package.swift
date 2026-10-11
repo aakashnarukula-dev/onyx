@@ -8,7 +8,7 @@ let package = Package(
         .executable(name: "Onyx", targets: ["Onyx"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.11.2"),
+        .package(path: "Vendor/SwiftTerm"),
     ],
     targets: [
         .target(name: "OnyxCore"),

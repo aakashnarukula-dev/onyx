@@ -34,8 +34,8 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         terminal.installColors(Theme.ansi)
         terminal.optionAsMetaKey = true
         terminal.processDelegate = self
-        // SwiftTerm always shows a legacy scroller; the trackpad still scrolls without it.
-        terminal.subviews.filter { $0 is NSScroller }.forEach { $0.isHidden = true }
+        // Terminal.app keeps 10,000 lines by default; SwiftTerm's default is 500.
+        terminal.changeScrollback(10_000)
 
         header.title = (cwd as NSString).abbreviatingWithTildeInPath
         header.onClose = { [weak self] in self?.requestClose() }
@@ -63,13 +63,47 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
                                 height: max(0, bounds.height - Theme.headerHeight - 1))
     }
 
+    /// The plain URL under a point in window coordinates, if any (⌘-click opens it, as in
+    /// Terminal.app). Cells carrying an OSC 8 hyperlink are left to SwiftTerm, which opens those.
+    func plainURL(atWindowPoint p: NSPoint) -> URL? {
+        let local = terminal.convert(p, from: nil)
+        guard terminal.bounds.contains(local) else { return nil }
+        let font = terminal.font
+        let cellH = ceil(CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font))
+        let cellW = font.advancement(forGlyph: font.glyph(withName: "W")).width
+        guard cellW > 0, cellH > 0 else { return nil }
+        let col = Int(local.x / cellW)
+        let row = Int((terminal.frame.height - local.y) / cellH)
+        guard let line = terminal.getTerminal().getLine(row: row), col < line.count,
+              line[col].getPayload() == nil,
+              let s = LinkFinder.url(in: lineText(line), at: col) else { return nil }
+        return URL(string: s)
+    }
+
+    /// One Character per cell; emoji and other non-BMP characters resolved through the terminal.
+    private func lineText(_ line: BufferLine, trimRight: Bool = false) -> String {
+        let t = terminal.getTerminal()
+        return line.translateToString(trimRight: trimRight, characterProvider: { t.getCharacter(for: $0) })
+    }
+
+    func getTerminalSize() -> (cols: Int, rows: Int, lines: Int) {
+        let t = terminal.getTerminal()
+        return (t.cols, t.rows, t.buffer.yDisp + t.rows)
+    }
+
     /// Non-empty visible lines (tests and snapshots).
     func visibleText() -> [String] {
         let t = terminal.getTerminal()
-        return (0..<t.rows).compactMap { t.getLine(row: $0)?.translateToString(trimRight: true) }.filter { !$0.isEmpty }
+        return (0..<t.rows).compactMap { t.getLine(row: $0).map { lineText($0, trimRight: true) } }.filter { !$0.isEmpty }
     }
 
     func focus() { window?.makeFirstResponder(terminal) }
+
+    /// ⌘K: clear screen and scrollback, then let the shell or Claude redraw.
+    func clear() {
+        terminal.feed(text: TerminalClear.localSequence)
+        terminal.send(TerminalClear.redrawKey)
+    }
 
     func setFontSize(_ size: CGFloat) { terminal.font = Theme.font(size: size) }
 

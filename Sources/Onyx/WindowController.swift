@@ -164,6 +164,8 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
 
     // MARK: Menu actions (first-responder chain)
 
+    @objc func clearPane(_ sender: Any?) { (focused ?? panes.first)?.clear() }
+
     @objc func closePane(_ sender: Any?) {
         if let pane = focused ?? panes.last { userClose(pane) }
     }

@@ -38,3 +38,11 @@ public enum PaneEnv {
         return String(cString: sh)
     }
 }
+
+/// ⌘K, as in Terminal.app: clear the screen and scrollback, then ask the program to redraw.
+public enum TerminalClear {
+    /// Fed to the terminal display (not the program): home, erase screen, erase scrollback.
+    public static let localSequence = "\u{1b}[H\u{1b}[2J\u{1b}[3J"
+    /// Sent to the program: Ctrl-L, which zsh and Claude both answer by redrawing.
+    public static let redrawKey: [UInt8] = [0x0c]
+}

@@ -22,6 +22,8 @@ enum MainMenu {
         edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(.separator())
+        edit.addItem(item("Clear", #selector(AppDelegate.clearPane(_:)), "k"))
 
         let view = submenu(main, "View")
         view.addItem(item("Bigger", #selector(AppDelegate.biggerFont(_:)), "="))

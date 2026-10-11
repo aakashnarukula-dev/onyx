@@ -1,8 +1,9 @@
 # Onyx
 
-A fast, pitch-black macOS terminal that tiles up to six terminals in one window. Every
-terminal starts Claude Code in auto mode in `~/Developer`, using the GitHub and Vercel
-accounts you picked. Terminals working in the same repo see each other and push safely.
+A fast, pitch-black macOS app that groups up to six normal terminals in one window. Each
+terminal is exactly what Terminal.app gives you — your login shell, your environment, your
+`gh`/git/vercel logins — except that it starts Claude Code in auto mode first, so you don't
+have to type it. Quit Claude and you're in your normal shell.
 
 ## Use
 
@@ -10,48 +11,17 @@ accounts you picked. Terminals working in the same repo see each other and push 
 |---|---|
 | `⌘N` / `+` | New terminal (the 7th opens a new window) |
 | `⌘⇧N` | New window |
-| `⌘W` | Close terminal |
+| `⌘W` | Close terminal (asks first if something is still running) |
+| `⌘K` | Clear |
+| `⌘C` / `⌘V` | Copy / paste |
+| `⌘`-click | Open a link |
 | `⌘1`…`⌘6` | Focus terminal |
 | `⌘⌥←↑↓→` | Move focus |
 | `⌘=` / `⌘-` | Font size |
-| `⌘,` | Settings |
 
 Layout follows the count: 1 full, 2 side by side, 3 = two stacked left + one right,
 4 = 2×2, 5 = 2+2+1, 6 = 3×2. Drag the gaps to resize; adding or closing re-flows.
-
-## Accounts
-
-Click the chip at the top right (`● gh: … · ▲ …`).
-
-- **GitHub:** lists the logins `gh` knows (`gh auth login` adds more). The active one gives
-  new terminals `GH_TOKEN` plus matching `GIT_AUTHOR_*`/`GIT_COMMITTER_*`. "identity"
-  overrides the commit name/email. HTTPS remotes only; SSH remotes ignore the token.
-- **Vercel:** add a label and a token from vercel.com/account/tokens. Tokens live in the
-  Keychain; the active one becomes `VERCEL_TOKEN`.
-
-Changes apply to new terminals; open ones keep theirs. Closing a terminal, window or the
-app asks first while Claude (or anything else) is still running in it.
-
-## Same-repo safety: `onyx-pane`
-
-Each Claude session is told to use this helper (it is on `PATH` in every terminal):
-
-```
-onyx-pane claim <dir> "<task>"   OK <root>  |  USE_WORKTREE <path> <branch>
-onyx-pane who [<dir>]            panes in the repo and their tasks
-onyx-pane push [<dir>]           one pane at a time: fetch, rebase, push
-                                 PUSHED <sha> [STASHED] | CONFLICT <files> | NO_REMOTE
-onyx-pane release [<dir>]        drops the claim; removes a merged, clean worktree
-```
-
-The first terminal in a repo works in the main checkout; later ones get a worktree under
-`.onyx-worktrees/` (git-excluded), branched from the remote's default branch (never from
-another pane's unpushed work), and push straight to that branch. A pane can hold claims in
-several repos; `push`/`release` act on the repo you run them in. Conflicts are
-resolved by Claude keeping both sides' intent; judgment calls go to you.
-
-State lives in `~/Library/Application Support/Onyx` (`settings.json`, `panes/`, `locks/`,
-`pane-prompt.md`).
+New terminals start in `~/Developer` (home if it doesn't exist). Scrollback: 10,000 lines.
 
 ## Build
 
@@ -62,7 +32,8 @@ scripts/test.sh      # unit tests (Swift Testing)
 scripts/bundle.sh    # release build -> /Applications/Onyx.app
 ```
 
-SwiftTerm is pinned to 1.11.2: newer versions ship a Metal shader that needs full Xcode.
+SwiftTerm v1.20.0 is vendored in `Vendor/SwiftTerm` with its Metal shader left out of the
+build (the Command Line Tools have no `metal` compiler; Onyx uses the CoreText renderer).
 
 Test hooks (inert unless set): `ONYX_PANE_COMMAND`, `ONYX_SNAPSHOT` + `ONYX_SCRIPT`,
 `ONYX_TIMING` — see `Sources/Onyx/DebugHooks.swift`.

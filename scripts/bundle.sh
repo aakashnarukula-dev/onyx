@@ -10,7 +10,7 @@ BIN=$(swift build -c release --show-bin-path)
 APP=build/Onyx.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN/Onyx" "$BIN/onyx-pane" "$APP/Contents/MacOS/"
+cp "$BIN/Onyx" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 
 # Icon: render once, then build every size iconutil wants.

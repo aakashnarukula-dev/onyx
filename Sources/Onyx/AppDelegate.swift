@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
+        installLinkClick()
         settings = Settings.load(paths)
         newWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -78,9 +79,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     private var developerDir: String { NSHomeDirectory() + "/Developer" }
 
+    /// ⌘-click on a plain URL opens it in the browser, like Terminal.app.
+    private func installLinkClick() {
+        NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+            guard event.modifierFlags.contains(.command), let self,
+                  let c = self.controllers.first(where: { $0.window === event.window }) else { return event }
+            for pane in c.panes {
+                if let url = pane.plainURL(atWindowPoint: event.locationInWindow) {
+                    NSWorkspace.shared.open(url)
+                    break
+                }
+            }
+            return event
+        }
+    }
+
     // MARK: Menu actions
 
     @objc func closePane(_ sender: Any?) { current?.closePane(sender) }
+
+    @objc func clearPane(_ sender: Any?) { current?.clearPane(sender) }
 
     @objc func focusPane(_ sender: NSMenuItem) { current?.focusPane(at: sender.tag) }
 
