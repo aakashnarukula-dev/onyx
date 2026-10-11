@@ -215,7 +215,7 @@ extension AppDelegate {
             report(dir, "snapshot step \(step) window \(w): \(c.panes.count) panes \(summary)")
             for (i, p) in c.panes.enumerated() {
                 let t = p.getTerminalSize()
-                report(dir, "  pane \(i) cursor=\(p.terminal.getTerminal().options.cursorStyle) focused=\(c.focused === p) scrollbar=\(p.terminal.subviews.contains { $0 is NSScroller && !$0.isHidden }) width=\(Int(p.terminal.frame.width)) used=\(Int(p.terminal.getOptimalFrameSize().width)) top=[\(p.topLine())] title=[\(p.headerTitle)] running=\(p.terminal.process.running) busy=\(p.isBusy) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
+                report(dir, "  pane \(i) cursor=\(p.terminal.getTerminal().options.cursorStyle) focused=\(c.focused === p) scrollbar=\(p.terminal.subviews.contains { $0 is NSScroller && !$0.isHidden }) width=\(Int(p.terminal.frame.width)) used=\(Int(p.terminal.getOptimalFrameSize().width)) top=[\(p.topLine())] title=[\(p.headerTitle)] running=\(p.terminal.process.running) busy=\(p.isBusy) risk=\(p.closeRisk) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
             }
             // The terminal leaves its default background transparent (the layer shows black
             // behind it on screen), so lay the picture over black as the window looks.

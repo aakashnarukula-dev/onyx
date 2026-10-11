@@ -42,8 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let busy = controllers.flatMap(\.panes).filter(\.isBusy).count
-        guard DebugHooks.env["ONYX_SNAPSHOT"] != nil || busy == 0 || confirmClose(busy: busy, quitting: true) else {
+        guard DebugHooks.env["ONYX_SNAPSHOT"] != nil || confirmClose(controllers.flatMap(\.panes).map(\.closeRisk), .app) else {
             return .terminateCancel
         }
         // Record what is open before the panes stop, then stop recording.

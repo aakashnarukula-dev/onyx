@@ -172,7 +172,7 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
 
     /// Close requested by the user: ask first if Claude (or anything) is still running there.
     func userClose(_ pane: PaneView) {
-        if pane.isBusy, !confirmClose(busy: 1) { return }
+        if !confirmClose([pane.closeRisk], .pane) { return }
         close(pane)
     }
 
@@ -187,8 +187,7 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
     // MARK: NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        let busy = panes.filter(\.isBusy).count
-        return busy == 0 || confirmClose(busy: busy)
+        return confirmClose(panes.map(\.closeRisk), .window)
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -200,22 +199,35 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
     }
 }
 
-/// "Claude is still running" confirmation. True means go ahead and close.
-/// Quitting keeps the Claude conversations (they reopen next launch); closing doesn't.
+/// Asks before quitting or closing cuts something off: a terminal where something is working, or
+/// one holding a Claude conversation. True means go ahead. Empty terminals never ask.
+enum CloseKind { case pane, window, app }
+
 @MainActor
-func confirmClose(busy: Int, quitting: Bool = false) -> Bool {
+func confirmClose(_ risks: [PaneView.CloseRisk], _ kind: CloseKind) -> Bool {
+    let working = risks.filter { $0 == .working }.count
+    let talks = risks.filter { $0 == .conversation }.count
+    guard working + talks > 0 else { return true }
+    func n(_ k: Int, _ one: String, _ many: String) -> String { k == 1 ? "1 \(one)" : "\(k) \(many)" }
+    var lines: [String] = []
     let alert = NSAlert()
-    if quitting {
+    switch kind {
+    case .app:
         alert.messageText = "Quit Onyx?"
-        alert.informativeText = (busy == 1 ? "Something is still working in 1 terminal." : "Something is still working in \(busy) terminals.")
-            + " Quitting stops it. Claude conversations can be reopened next time you open Onyx."
-    } else {
-        alert.messageText = busy == 1 ? "Close this terminal?" : "Close \(busy) busy terminals?"
-        alert.informativeText = busy == 1
-            ? "Something is still working in it (Claude answering, or another program). Closing stops it."
-            : "Something is still working in them (Claude answering, or another program). Closing stops it."
+        if working > 0 { lines.append("Something is still working in \(n(working, "terminal", "terminals")); quitting stops it.") }
+        lines.append("Your Claude conversations can be reopened next time you open Onyx.")
+    case .pane, .window:
+        alert.messageText = kind == .pane ? "Close this terminal?" : "Close this window?"
+        if working > 0 {
+            lines.append(kind == .pane ? "Something is still working in it (Claude answering, or another program); closing stops it."
+                                       : "Something is still working in \(n(working, "terminal", "terminals")); closing stops it.")
+        }
+        if talks > 0 || working > 0 {
+            lines.append("Its Claude conversations won't come back when you reopen Onyx; `claude --resume` still finds them.")
+        }
     }
-    alert.addButton(withTitle: quitting ? "Quit" : "Close")
+    alert.informativeText = lines.joined(separator: " ")
+    alert.addButton(withTitle: kind == .app ? "Quit" : "Close")
     alert.addButton(withTitle: "Cancel")
     return alert.runModal() == .alertFirstButtonReturn
 }

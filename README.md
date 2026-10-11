@@ -13,7 +13,7 @@ for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in
 |---|---|
 | `⌘N` / `+` | New terminal (the 7th opens a new window) |
 | `⌘⇧N` | New window |
-| `⌘W` | Close terminal (asks first if Claude is answering or another program runs) |
+| `⌘W` | Close terminal (asks first if it holds a Claude conversation or something is working) |
 | `⌘K` | Clear |
 | `⌘C` / `⌘V` | Copy / paste |
 | `⌘`-click | Open a link |

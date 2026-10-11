@@ -169,13 +169,26 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     /// Claude's own records of its sessions, shared by every pane.
     static let claude = ClaudeSessions()
 
-    /// True while something in the pane would be cut off by closing it: a program other than the
-    /// shell, or a Claude that is answering or waiting for you. An idle Claude doesn't count: its
-    /// conversation is saved and can be reopened.
-    var isBusy: Bool {
-        guard !closed, terminal.process.running else { return false }
-        return childPids(of: terminal.process.shellPid).contains { PaneView.claude.running(pid: $0)?.working ?? true }
+    /// What closing the pane would cut off, worst first.
+    enum CloseRisk: Comparable {
+        case none          // bare shell, or a Claude with no messages yet
+        case conversation  // an idle Claude holding a conversation
+        case working       // Claude answering or waiting for you, or another program running
     }
+
+    var closeRisk: CloseRisk {
+        guard !closed, terminal.process.running else { return .none }
+        var risk = CloseRisk.none
+        for pid in childPids(of: terminal.process.shellPid) {
+            guard let s = PaneView.claude.running(pid: pid) else { return .working }
+            if s.working { return .working }
+            if PaneView.claude.hasTranscript(id: s.id) { risk = .conversation }
+        }
+        return risk
+    }
+
+    /// Something is working in the pane (an idle Claude is not).
+    var isBusy: Bool { closeRisk == .working }
 
     /// Starts ending the shell and everything under it and returns what must be reaped.
     /// Interactive zsh ignores SIGTERM, so the shell gets SIGHUP; its children get both.
