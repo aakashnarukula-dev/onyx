@@ -32,7 +32,13 @@ for s in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Onyx.icns"
 
-codesign --force --deep -s - "$APP"
+# Sign with the local certificate when there is one (scripts/make-signing-cert.sh), so every
+# rebuild keeps one identity and macOS keeps Onyx's permissions (microphone, folders).
+if security find-certificate -c "Onyx Local Signing" >/dev/null 2>&1; then
+  codesign --force -s "Onyx Local Signing" "$APP"
+else
+  codesign --force -s - "$APP"
+fi
 rm -rf /Applications/Onyx.app
 ditto "$APP" /Applications/Onyx.app
 # Leave only the installed copy, so Spotlight and launchers list one Onyx.

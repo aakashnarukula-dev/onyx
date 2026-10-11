@@ -57,6 +57,11 @@ scripts/bundle.sh          # builds (first time takes a few minutes, ~8 on a Mac
 open /Applications/Onyx.app
 ```
 
+Optional, once per Mac: `scripts/make-signing-cert.sh` adds a self-signed "Onyx Local Signing"
+certificate to your keychain (the first build after asks you to allow codesign to use it — enter
+your password, click Always Allow). Builds are then signed with it, so macOS keeps Onyx's
+permissions (microphone for Claude's voice input, folders) across updates instead of asking again.
+
 The install pins Onyx to the Dock once (it never adds a second icon); set `ONYX_NO_DOCK=1` to skip that.
 
 Built on your Mac, so Gatekeeper doesn't block it. To update: `git pull && scripts/bundle.sh`
