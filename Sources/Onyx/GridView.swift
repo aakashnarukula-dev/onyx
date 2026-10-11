@@ -35,6 +35,7 @@ final class GridView: NSView {
 
     /// Resets all dividers to equal sizes (after a pane is added or closed).
     func reflow() {
+        drag = nil  // a pane closing mid-drag must not leave a divider index into the old layout
         let cols = columns
         widths = Array(repeating: 1 / CGFloat(max(cols.count, 1)), count: cols.count)
         heights = cols.map { Array(repeating: 1 / CGFloat($0), count: $0) }
@@ -107,9 +108,11 @@ final class GridView: NSView {
         let p = convert(event.locationInWindow, from: nil)
         switch drag {
         case .column(let i):
+            guard i + 1 < widths.count else { self.drag = nil; return }
             let usable = bounds.width - Theme.gap * CGFloat(widths.count - 1)
             widths = GridLayout.drag(fractions: widths, divider: i, by: p.x - lastPoint.x, total: usable, min: Theme.minPane.width)
         case .row(let c, let i):
+            guard c < heights.count, i + 1 < heights[c].count else { self.drag = nil; return }
             let usable = bounds.height - Theme.gap * CGFloat(heights[c].count - 1)
             // AppKit y grows upward; row 0 is the top pane, so dragging up shrinks it.
             heights[c] = GridLayout.drag(fractions: heights[c], divider: i, by: lastPoint.y - p.y, total: usable, min: Theme.minPane.height)

@@ -4,37 +4,63 @@ import Testing
 
 struct PaneEnvTests {
     @Test func addsTerminalVars() {
-        let env = PaneEnv.build(base: ["PATH": "/usr/bin", "HOME": "/h"])
+        let env = PaneEnv.build(base: ["PATH": "/usr/bin", "HOME": "/h"], locale: nil)
         #expect(env["TERM"] == "xterm-256color")
         #expect(env["COLORTERM"] == "truecolor")
         #expect(env["TERM_PROGRAM"] == "Onyx")
         #expect(env["PATH"] == "/usr/bin" && env["HOME"] == "/h")
     }
 
-    /// Apps opened from Finder get no LANG; without it zsh and Claude mangle non-ASCII text.
-    @Test func setsUTF8LocaleWhenMissing() {
-        #expect(PaneEnv.build(base: [:])["LANG"] == "en_US.UTF-8")
-        #expect(PaneEnv.build(base: ["LANG": "de_DE.UTF-8"])["LANG"] == "de_DE.UTF-8")
+    /// Like Terminal.app: LANG from the user's region when the launcher gave none.
+    @Test func localeFromRegion() {
+        #expect(PaneEnv.build(base: [:], locale: "en_IN")["LANG"] == "en_IN.UTF-8")
+        #expect(PaneEnv.build(base: [:], locale: "xx_NOPE")["LANG"] == "en_US.UTF-8")
+        #expect(PaneEnv.build(base: [:], locale: nil)["LANG"] == "en_US.UTF-8")
+        #expect(PaneEnv.build(base: ["LANG": "de_DE.UTF-8"], locale: "en_IN")["LANG"] == "de_DE.UTF-8")
     }
 
-    /// Your own logins stay exactly as your shell has them: nothing account-related is touched.
     @Test func leavesAccountsAlone() {
-        let env = PaneEnv.build(base: ["GH_TOKEN": "t", "GIT_AUTHOR_NAME": "me", "VERCEL_TOKEN": "v"])
+        let env = PaneEnv.build(base: ["GH_TOKEN": "t", "GIT_AUTHOR_NAME": "me", "VERCEL_TOKEN": "v"], locale: nil)
         #expect(env["GH_TOKEN"] == "t" && env["GIT_AUTHOR_NAME"] == "me" && env["VERCEL_TOKEN"] == "v")
     }
 
-    @Test func dropsInheritedClaudeSessionMarkers() {
-        let env = PaneEnv.build(base: ["CLAUDECODE": "1", "CLAUDE_CODE_CHILD_SESSION": "x", "KEEP": "1"])
-        #expect(env["CLAUDECODE"] == nil && env["CLAUDE_CODE_CHILD_SESSION"] == nil)
+    @Test func dropsLauncherTerminalAndClaudeVars() {
+        let base = ["CLAUDECODE": "1", "CLAUDE_CODE_CHILD_SESSION": "x", "TERM_PROGRAM_VERSION": "455",
+                    "TERM_SESSION_ID": "w0", "TMUX": "/t", "TMUX_PANE": "%1", "ITERM_SESSION_ID": "i",
+                    "VSCODE_PID": "1", "SHLVL": "3", "KEEP": "1"]
+        let env = PaneEnv.build(base: base, locale: nil)
+        for k in base.keys where k != "KEEP" { #expect(env[k] == nil, "\(k) leaked") }
         #expect(env["KEEP"] == "1")
     }
 
-    @Test func startupCommandRunsClaudeThenAShell() {
-        let args = PaneEnv.shellArgs(shell: "/bin/zsh", command: PaneEnv.claudeCommand)
-        #expect(args.prefix(3) == ["-l", "-i", "-c"])
-        #expect(args[3].contains("claude --permission-mode auto"))
-        #expect(args[3].hasSuffix("; exec '/bin/zsh' -l -i"))
-        #expect(!args[3].contains("append-system-prompt"))
+    @Test func zshStartsAsPlainLoginShellWithFirstCommand() {
+        let l = PaneEnv.launch(shell: "/bin/zsh", firstCommand: "claude --permission-mode auto",
+                               zdotdir: "/onyx/zsh", userZdotdir: "/u/zdot")
+        #expect(l.args.isEmpty)                      // login + interactive, like Terminal.app
+        #expect(l.execName == "-zsh")
+        #expect(l.env["ZDOTDIR"] == "/onyx/zsh")
+        #expect(l.env["ONYX_USER_ZDOTDIR"] == "/u/zdot")
+        #expect(l.env["ONYX_FIRST_COMMAND"] == "claude --permission-mode auto")
+    }
+
+    @Test func otherShellsFallBackToCommandThenShell() {
+        let l = PaneEnv.launch(shell: "/bin/bash", firstCommand: "claude --permission-mode auto", zdotdir: "/z", userZdotdir: nil)
+        #expect(l.args.prefix(3) == ["-l", "-i", "-c"])
+        #expect(l.args[3].contains("claude --permission-mode auto"))
+        #expect(l.args[3].hasSuffix("; exec '/bin/bash' -l -i"))
+        #expect(l.env["ZDOTDIR"] == nil)
+    }
+
+    @Test func zshIntegrationRestoresUserSetupAndRunsCommandOnce() throws {
+        let s = ZshIntegration.zshenv
+        #expect(s.contains(#"ZDOTDIR="$ONYX_USER_ZDOTDIR""#))
+        #expect(s.contains("unset ZDOTDIR"))
+        #expect(s.contains(#"source "${ZDOTDIR:-$HOME}/.zshenv""#))
+        #expect(s.contains("add-zle-hook-widget -d zle-line-init"))
+        #expect(s.contains("zle accept-line"))
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let out = try ZshIntegration.write(to: dir)
+        #expect(try String(contentsOf: out.appendingPathComponent(".zshenv"), encoding: .utf8) == s)
     }
 
     @Test func loginShellFallsBackToZsh() {

@@ -29,12 +29,14 @@ enum DebugHooks {
             case "k":  // k<pane>.<text id>: type $ONYX_TYPE_<text id> into <pane> as key events
                 let parts = step.dropFirst().split(separator: ".")
                 if parts.count == 2, let k = Int(parts[0]), let text = env["ONYX_TYPE_\(parts[1])"] { app.keyType(text, intoPane: k) }
-            case "c": if let k = Int(step.dropFirst()) { app.keyControlC(intoPane: k) }
+            case "c": if let k = Int(step.dropFirst()) { app.keyControl("c", intoPane: k) }
+            case "z": if let k = Int(step.dropFirst()) { app.keyControl("z", intoPane: k) }
             case "K": app.clearPane(nil)
+            case "+": app.biggerFont(nil)
+            case "-": app.smallerFont(nil)
             case "m": app.measure(dir: dir)
             case "V": if let k = Int(step.dropFirst()) { app.pasteInto(pane: k) }
             case "r": app.resizeLast(to: CGSize(width: 900, height: 560))
-            case "u": if let k = Int(step.dropFirst()) { app.checkURL(inPane: k, dir: dir) }
             case "d": app.dragFirstDivider(by: Double(step.dropFirst()) ?? 100)
             default: break
             }
@@ -74,12 +76,15 @@ extension AppDelegate {
         }
     }
 
-    func keyControlC(intoPane index: Int) {
-        guard let c = windowControllers.last, c.panes.indices.contains(index), let w = c.window else { return }
+    func keyControl(_ letter: Character, intoPane index: Int) {
+        guard let c = windowControllers.last, c.panes.indices.contains(index), let w = c.window,
+              let code = letter.asciiValue else { return }
         c.panes[index].focus()
+        let keyCodes: [Character: UInt16] = ["c": 8, "z": 6]
         if let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 0,
-                                    windowNumber: w.windowNumber, context: nil, characters: "\u{3}",
-                                    charactersIgnoringModifiers: "c", isARepeat: false, keyCode: 8) {
+                                    windowNumber: w.windowNumber, context: nil,
+                                    characters: String(UnicodeScalar(code - 96)),
+                                    charactersIgnoringModifiers: String(letter), isARepeat: false, keyCode: keyCodes[letter] ?? 0) {
             w.sendEvent(e)
         }
     }
@@ -128,25 +133,6 @@ extension AppDelegate {
         w.setFrame(NSRect(origin: w.frame.origin, size: size), display: true)
     }
 
-    /// Finds the first "https://" on screen in pane `index` and runs the ⌘-click hit test on it.
-    func checkURL(inPane index: Int, dir: String) {
-        guard let c = windowControllers.last, c.panes.indices.contains(index) else { return }
-        let pane = c.panes[index]
-        let t = pane.terminal.getTerminal()
-        let font = pane.terminal.font
-        let cellH = ceil(CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font))
-        let cellW = font.advancement(forGlyph: font.glyph(withName: "W")).width
-        for row in 0..<t.rows {
-            guard let line = t.getLine(row: row)?.translateToString(), let r = line.range(of: "https://") else { continue }
-            let col = line.distance(from: line.startIndex, to: r.lowerBound) + 10
-            let local = CGPoint(x: (CGFloat(col) + 0.5) * cellW, y: pane.terminal.frame.height - (CGFloat(row) + 0.5) * cellH)
-            let p = pane.terminal.convert(local, to: nil)
-            report(dir, "url hit row \(row) col \(col): \(pane.plainURL(atWindowPoint: p)?.absoluteString ?? "nil")")
-            return
-        }
-        report(dir, "url hit: no https on screen")
-    }
-
     /// Types `text` into pane `index` of the last window, then presses Return.
     func type(_ text: String, intoPane index: Int) {
         guard let c = windowControllers.last, c.panes.indices.contains(index) else { return }
@@ -181,7 +167,7 @@ extension AppDelegate {
             report(dir, "snapshot step \(step) window \(w): \(c.panes.count) panes \(summary)")
             for (i, p) in c.panes.enumerated() {
                 let t = p.getTerminalSize()
-                report(dir, "  pane \(i) running=\(p.terminal.process.running) busy=\(p.isBusy) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
+                report(dir, "  pane \(i) title=[\(p.headerTitle)] running=\(p.terminal.process.running) busy=\(p.isBusy) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
             }
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/\(step)-\(w).png"))
         }

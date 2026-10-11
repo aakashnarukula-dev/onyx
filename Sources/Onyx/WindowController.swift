@@ -17,8 +17,14 @@ final class TopBar: NSView {
     override var mouseDownCanMoveWindow: Bool { true }
     override var isFlipped: Bool { true }
 
+    /// Double-click follows System Settings › Desktop & Dock › "Double-click a window's title bar".
     override func mouseUp(with event: NSEvent) {
-        if event.clickCount == 2 { window?.performZoom(nil) }
+        guard event.clickCount == 2 else { return }
+        switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize" {
+        case "Minimize": window?.performMiniaturize(nil)
+        case "None": break
+        default: window?.performZoom(nil)
+        }
     }
 }
 
@@ -75,7 +81,13 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
                                                name: NSView.frameDidChangeNotification, object: content)
         content.postsFrameChangedNotifications = true
         layoutAll()
+        // Keep pane headers in step with the shell's folder / the running program, like Terminal.
+        titleTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.panes.forEach { $0.refreshTitle() } }
+        }
     }
+
+    private var titleTimer: Timer?
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
@@ -178,7 +190,8 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
     }
 
     func windowWillClose(_ notification: Notification) {
-        panes.forEach { $0.shutdown(wait: true) }
+        titleTimer?.invalidate()
+        panes.forEach { $0.shutdown() }
         panes.removeAll()
         host?.windowControllerDidClose(self)
     }

@@ -26,7 +26,14 @@ enum MainMenu {
         edit.addItem(item("Clear", #selector(AppDelegate.clearPane(_:)), "k"))
 
         let view = submenu(main, "View")
+        view.addItem(item("Default Size", #selector(AppDelegate.defaultFont(_:)), "0"))
         view.addItem(item("Bigger", #selector(AppDelegate.biggerFont(_:)), "="))
+        // ⌘+ (⌘⇧=) as well, like Terminal.app; hidden alternate of "Bigger".
+        let plus = item("Bigger", #selector(AppDelegate.biggerFont(_:)), "+")
+        plus.isAlternate = true
+        plus.isHidden = true
+        plus.allowsKeyEquivalentWhenHidden = true
+        view.addItem(plus)
         view.addItem(item("Smaller", #selector(AppDelegate.smallerFont(_:)), "-"))
         view.addItem(.separator())
         for i in 0..<6 {

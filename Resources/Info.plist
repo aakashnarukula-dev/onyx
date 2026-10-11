@@ -14,5 +14,11 @@
     <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSAppleEventsUsageDescription</key><string>Programs you run in Onyx terminals want to control other apps.</string>
+    <key>NSDesktopFolderUsageDescription</key><string>Programs you run in Onyx terminals want to access your Desktop folder.</string>
+    <key>NSDocumentsFolderUsageDescription</key><string>Programs you run in Onyx terminals want to access your Documents folder.</string>
+    <key>NSDownloadsFolderUsageDescription</key><string>Programs you run in Onyx terminals want to access your Downloads folder.</string>
+    <key>NSRemovableVolumesUsageDescription</key><string>Programs you run in Onyx terminals want to access removable volumes.</string>
+    <key>NSNetworkVolumesUsageDescription</key><string>Programs you run in Onyx terminals want to access network volumes.</string>
 </dict>
 </plist>

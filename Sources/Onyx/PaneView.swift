@@ -17,6 +17,7 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     var isFocused = false { didSet { updateFocusLook() } }
 
     private let cwd: String
+    private var programTitle: String?
 
     /// Builds the view; the shell starts on `start(shell:args:env:)`.
     init(cwd: String, fontSize: CGFloat) {
@@ -45,11 +46,11 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         updateFocusLook()
     }
 
-    func start(shell: String, args: [String], env: [String: String]) {
+    func start(shell: String, args: [String], execName: String, env: [String: String]) {
         guard !closed, !terminal.process.running else { return }
         terminal.startProcess(executable: shell, args: args,
                               environment: env.map { "\($0.key)=\($0.value)" },
-                              execName: "-" + (shell as NSString).lastPathComponent, currentDirectory: cwd)
+                              execName: execName, currentDirectory: cwd)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -63,28 +64,13 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
                                 height: max(0, bounds.height - Theme.headerHeight - 1))
     }
 
-    /// The plain URL under a point in window coordinates, if any (⌘-click opens it, as in
-    /// Terminal.app). Cells carrying an OSC 8 hyperlink are left to SwiftTerm, which opens those.
-    func plainURL(atWindowPoint p: NSPoint) -> URL? {
-        let local = terminal.convert(p, from: nil)
-        guard terminal.bounds.contains(local) else { return nil }
-        let font = terminal.font
-        let cellH = ceil(CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font))
-        let cellW = font.advancement(forGlyph: font.glyph(withName: "W")).width
-        guard cellW > 0, cellH > 0 else { return nil }
-        let col = Int(local.x / cellW)
-        let row = Int((terminal.frame.height - local.y) / cellH)
-        guard let line = terminal.getTerminal().getLine(row: row), col < line.count,
-              line[col].getPayload() == nil,
-              let s = LinkFinder.url(in: lineText(line), at: col) else { return nil }
-        return URL(string: s)
-    }
-
     /// One Character per cell; emoji and other non-BMP characters resolved through the terminal.
     private func lineText(_ line: BufferLine, trimRight: Bool = false) -> String {
         let t = terminal.getTerminal()
         return line.translateToString(trimRight: trimRight, characterProvider: { t.getCharacter(for: $0) })
     }
+
+    var headerTitle: String { header.title }
 
     func getTerminalSize() -> (cols: Int, rows: Int, lines: Int) {
         let t = terminal.getTerminal()
@@ -99,10 +85,40 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
 
     func focus() { window?.makeFirstResponder(terminal) }
 
-    /// ⌘K: clear screen and scrollback, then let the shell or Claude redraw.
+    /// ⌘K: clear screen and scrollback. Ctrl-L (redraw) goes only to the shell or Claude; any
+    /// other program (a password prompt, `cat`, an editor) would take it as input.
     func clear() {
         terminal.feed(text: TerminalClear.localSequence)
-        terminal.send(TerminalClear.redrawKey)
+        let fg = foregroundPid
+        if fg == terminal.process.shellPid || (fg.flatMap(executablePath)?.contains("claude") ?? false) {
+            terminal.send(TerminalClear.redrawKey)
+        }
+    }
+
+    /// Leader of the terminal's foreground process group (the program the user is talking to).
+    var foregroundPid: pid_t? {
+        let fd = terminal.process.childfd
+        guard fd >= 0 else { return nil }
+        let pgid = tcgetpgrp(fd)
+        return pgid > 0 ? pgid : nil
+    }
+
+    /// Header text like Terminal.app's: the folder while the shell is in front, otherwise the
+    /// running program's own title (or its name).
+    func refreshTitle() {
+        guard !closed, terminal.process.running else { return }
+        let shell = terminal.process.shellPid
+        let fg = foregroundPid
+        let text: String
+        if fg == nil || fg == shell {
+            text = currentDirectory(of: shell).map { ($0 as NSString).abbreviatingWithTildeInPath } ?? header.title
+            programTitle = nil
+        } else if let t = programTitle, !t.isEmpty {
+            text = t
+        } else {
+            text = fg.flatMap(processName) ?? header.title
+        }
+        if header.title != text { header.title = text }
     }
 
     func setFontSize(_ size: CGFloat) { terminal.font = Theme.font(size: size) }
@@ -115,34 +131,24 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         return !childPids(of: terminal.process.shellPid).isEmpty
     }
 
-    /// Ends the shell and everything under it. Interactive zsh ignores SIGTERM, so hang up the
-    /// children and the shell, reap the shell (SwiftTerm stops watching it on terminate), and
-    /// SIGKILL whatever is left after a grace period. `wait` blocks (used on quit, when a
-    /// background reaper would die with the app).
-    func shutdown(wait: Bool = false) {
-        guard !closed else { return }
+    /// Starts ending the shell and everything under it and returns what must be reaped.
+    /// Interactive zsh ignores SIGTERM, so the shell gets SIGHUP; its children get both.
+    func beginShutdown() -> PaneProcesses? {
+        guard !closed else { return nil }
         closed = true
         let shell = terminal.process.shellPid
-        guard terminal.process.running, shell > 0 else { return }
+        guard terminal.process.running, shell > 0 else { return nil }
         let children = childPids(of: shell)
         children.forEach { kill($0, SIGHUP); kill($0, SIGTERM) }
         kill(shell, SIGHUP)
         terminal.process.terminate()
-        let reap = { @Sendable in
-            let deadline = Date().addingTimeInterval(wait ? 1.5 : 2)
-            var status: Int32 = 0
-            func gone(_ p: pid_t) -> Bool { kill(p, 0) != 0 }
-            while !(waitpid(shell, &status, WNOHANG) != 0 && children.allSatisfy(gone)) {
-                if Date() > deadline {
-                    children.forEach { kill($0, SIGKILL) }
-                    kill(shell, SIGKILL)
-                    waitpid(shell, &status, 0)
-                    return
-                }
-                usleep(20_000)
-            }
-        }
-        if wait { reap() } else { DispatchQueue.global(qos: .utility).async(execute: reap) }
+        return PaneProcesses(shell: shell, children: children)
+    }
+
+    /// Ends the pane's processes; the reaping (SIGKILL after 2 s) happens in the background.
+    func shutdown() {
+        guard let p = beginShutdown() else { return }
+        DispatchQueue.global(qos: .utility).async { PaneProcesses.reap([p], within: 2) }
     }
 
     private func updateFocusLook() {
@@ -155,7 +161,8 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
 
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
-        if !title.isEmpty { header.title = title }
+        programTitle = title
+        refreshTitle()
     }
 
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
@@ -167,6 +174,50 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.closed else { return }
             self.delegate?.paneProcessEnded(self)
+        }
+    }
+}
+
+func executablePath(_ pid: pid_t) -> String? {
+    var buf = [CChar](repeating: 0, count: 4096)
+    return proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 ? String(cString: buf) : nil
+}
+
+func processName(_ pid: pid_t) -> String? {
+    var buf = [CChar](repeating: 0, count: 256)
+    return proc_name(pid, &buf, UInt32(buf.count)) > 0 ? String(cString: buf) : nil
+}
+
+func currentDirectory(of pid: pid_t) -> String? {
+    var info = proc_vnodepathinfo()
+    let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+    guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+    return withUnsafeBytes(of: info.pvi_cdir.vip_path) { raw in
+        String(cString: raw.bindMemory(to: CChar.self).baseAddress!)
+    }
+}
+
+/// A closed pane's shell and its children, to be reaped.
+struct PaneProcesses: Sendable {
+    let shell: pid_t
+    let children: [pid_t]
+
+    /// Waits until every shell is reaped and every child gone, SIGKILLing what is left at the
+    /// deadline. One shared deadline, so quitting with many panes takes at most `seconds`.
+    static func reap(_ all: [PaneProcesses], within seconds: TimeInterval) {
+        let deadline = Date().addingTimeInterval(seconds)
+        var pending = all.map(\.shell)
+        let children = all.flatMap(\.children)
+        while true {
+            var status: Int32 = 0
+            pending.removeAll { waitpid($0, &status, WNOHANG) != 0 }
+            if pending.isEmpty && children.allSatisfy({ kill($0, 0) != 0 }) { return }
+            if Date() > deadline {
+                children.forEach { kill($0, SIGKILL) }
+                pending.forEach { kill($0, SIGKILL); waitpid($0, &status, 0) }
+                return
+            }
+            usleep(20_000)
         }
     }
 }

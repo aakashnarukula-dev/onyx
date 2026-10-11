@@ -7,20 +7,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     private var controllers: [WindowController] = []
     var windowControllers: [WindowController] { controllers }
     private let shell = PaneEnv.loginShell()
+    private var zshDir = ""
     private let launchedAt = ProcessInfo.processInfo.systemUptime
     private let timing = ProcessInfo.processInfo.environment["ONYX_TIMING"] != nil
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
-        installLinkClick()
         settings = Settings.load(paths)
+        zshDir = (try? ZshIntegration.write(to: paths.home.appendingPathComponent("zsh")).path) ?? ""
         newWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         log("first pane")
         DebugHooks.runScriptIfAny(self)
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    /// Like Terminal.app: closing the last window leaves Onyx running; the Dock icon reopens one.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        DebugHooks.env["ONYX_SNAPSHOT"] != nil
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if controllers.isEmpty { newWindow(nil) }
+        return true
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if DebugHooks.env["ONYX_SNAPSHOT"] != nil { return .terminateNow }
@@ -29,13 +38,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        controllers.forEach { $0.panes.forEach { $0.shutdown(wait: true) } }
+        // Signal every pane first, then reap them all against one deadline.
+        log("quit: stopping panes")
+        let all = controllers.flatMap(\.panes).compactMap { $0.beginShutdown() }
+        PaneProcesses.reap(all, within: 3)
+        log("quit: \(all.count) panes stopped")
     }
 
     // MARK: Windows and panes
 
     private var current: WindowController? {
-        controllers.first { $0.window?.isKeyWindow == true } ?? controllers.last
+        controllers.first { $0.window?.isMainWindow == true } ?? controllers.last
     }
 
     /// ⌘N: a new terminal in the current window, or a new window once it holds six.
@@ -67,9 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     func makePane(for controller: WindowController) -> PaneView {
         let cwd = FileManager.default.fileExists(atPath: developerDir) ? developerDir : NSHomeDirectory()
         let pane = PaneView(cwd: cwd, fontSize: CGFloat(settings.fontSize))
-        pane.start(shell: shell,
-                   args: PaneEnv.shellArgs(shell: shell, command: DebugHooks.paneCommand ?? PaneEnv.claudeCommand),
-                   env: PaneEnv.build(base: ProcessInfo.processInfo.environment))
+        let base = ProcessInfo.processInfo.environment
+        let launch = PaneEnv.launch(shell: shell, firstCommand: DebugHooks.paneCommand ?? PaneEnv.claudeCommand,
+                                    zdotdir: zshDir, userZdotdir: base["ZDOTDIR"])
+        pane.start(shell: shell, args: launch.args, execName: launch.execName,
+                   env: PaneEnv.build(base: base).merging(launch.env) { _, new in new })
         return pane
     }
 
@@ -78,21 +93,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     }
 
     private var developerDir: String { NSHomeDirectory() + "/Developer" }
-
-    /// ⌘-click on a plain URL opens it in the browser, like Terminal.app.
-    private func installLinkClick() {
-        NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
-            guard event.modifierFlags.contains(.command), let self,
-                  let c = self.controllers.first(where: { $0.window === event.window }) else { return event }
-            for pane in c.panes {
-                if let url = pane.plainURL(atWindowPoint: event.locationInWindow) {
-                    NSWorkspace.shared.open(url)
-                    break
-                }
-            }
-            return event
-        }
-    }
 
     // MARK: Menu actions
 
@@ -110,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     @objc func biggerFont(_ sender: Any?) { setFont(settings.fontSize + 1) }
     @objc func smallerFont(_ sender: Any?) { setFont(settings.fontSize - 1) }
+    @objc func defaultFont(_ sender: Any?) { setFont(Settings().fontSize) }
 
     private func setFont(_ size: Double) {
         settings.fontSize = min(max(size, 9), 28)

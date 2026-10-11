@@ -1,9 +1,9 @@
 # Onyx
 
 A fast, pitch-black macOS app that groups up to six normal terminals in one window. Each
-terminal is exactly what Terminal.app gives you — your login shell, your environment, your
-`gh`/git/vercel logins — except that it starts Claude Code in auto mode first, so you don't
-have to type it. Quit Claude and you're in your normal shell.
+terminal is exactly what Terminal.app gives you — your login shell started the same way, your
+environment, your `gh`/git/vercel logins — except that `claude --permission-mode auto` is typed
+for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in your shell.
 
 ## Use
 
@@ -17,11 +17,13 @@ have to type it. Quit Claude and you're in your normal shell.
 | `⌘`-click | Open a link |
 | `⌘1`…`⌘6` | Focus terminal |
 | `⌘⌥←↑↓→` | Move focus |
-| `⌘=` / `⌘-` | Font size |
+| `⌘+` / `⌘-` / `⌘0` | Font bigger / smaller / default |
 
 Layout follows the count: 1 full, 2 side by side, 3 = two stacked left + one right,
 4 = 2×2, 5 = 2+2+1, 6 = 3×2. Drag the gaps to resize; adding or closing re-flows.
 New terminals start in `~/Developer` (home if it doesn't exist). Scrollback: 10,000 lines.
+Each header shows the folder while the shell is in front, otherwise the running program.
+Closing the last window keeps Onyx running, like Terminal; click the Dock icon for a new one.
 
 ## Build
 
