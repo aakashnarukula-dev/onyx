@@ -53,7 +53,7 @@ so `claude` is on your PATH; without it each terminal is a plain shell.
 ```
 git clone https://github.com/aakashnarukula-dev/onyx.git
 cd onyx
-scripts/bundle.sh          # builds (about 2 min the first time), installs /Applications/Onyx.app, pins it to the Dock
+scripts/bundle.sh          # builds (first time takes a few minutes, ~8 on a MacBook Air), installs /Applications/Onyx.app, pins it to the Dock
 open /Applications/Onyx.app
 ```
 

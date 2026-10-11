@@ -20,6 +20,7 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
 
     private let cwd: String
     private var programTitle: String?
+    private var titleOwner: pid_t?  // the program that set `programTitle`
 
     /// Builds the view; the shell starts on `start(shell:args:env:)`.
     init(cwd: String, fontSize: CGFloat) {
@@ -130,11 +131,10 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         let text: String
         if fg == nil || fg == shell {
             text = currentDirectory(of: shell).map { ($0 as NSString).abbreviatingWithTildeInPath } ?? header.title
-            programTitle = nil
-        } else if let t = programTitle, !t.isEmpty {
-            text = t
+        } else if fg == titleOwner, let t = programTitle, !t.isEmpty {
+            text = t  // also after Ctrl-Z / fg, when the program doesn't send its title again
         } else {
-            text = fg.flatMap(processName) ?? header.title
+            text = fg.flatMap { commandName($0) ?? processName($0) } ?? header.title
         }
         if header.title != text { header.title = text }
     }
@@ -206,6 +206,7 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
 
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
         programTitle = title
+        titleOwner = foregroundPid
         refreshTitle()
     }
 
@@ -225,6 +226,25 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
 func executablePath(_ pid: pid_t) -> String? {
     var buf = [CChar](repeating: 0, count: 4096)
     return proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 ? String(cString: buf) : nil
+}
+
+/// The name a process was started as (argv[0]), e.g. "claude" for Claude Code, whose file is
+/// named after its version ("2.1.296").
+func commandName(_ pid: pid_t) -> String? {
+    var mib = [CTL_KERN, KERN_PROCARGS2, pid]
+    var size = 0
+    guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
+    var buf = [UInt8](repeating: 0, count: size)
+    guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0 else { return nil }
+    // Layout: argc, executable path, NUL padding, then argv[0].
+    var i = MemoryLayout<Int32>.size
+    while i < size, buf[i] != 0 { i += 1 }
+    while i < size, buf[i] == 0 { i += 1 }
+    var end = i
+    while end < size, buf[end] != 0 { end += 1 }
+    guard end > i, let arg0 = String(bytes: buf[i..<end], encoding: .utf8) else { return nil }
+    let name = (arg0 as NSString).lastPathComponent
+    return name.hasPrefix("-") ? String(name.dropFirst()) : name
 }
 
 func processName(_ pid: pid_t) -> String? {
