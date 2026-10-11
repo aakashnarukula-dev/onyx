@@ -4120,6 +4120,10 @@ open class Terminal {
         setCursor(col: 0, row: 0)
     }
 
+    /// The shape `CSI 0 SP q` restores (the user's chosen cursor, as in Terminal.app and iTerm2).
+    /// Onyx patch: upstream maps 0 to a blinking block.
+    public var defaultCursorStyle: CursorStyle = .blinkBlock
+
     public func setCursorStyle (_ style: CursorStyle)
     {
         if options.cursorStyle != style {
@@ -4143,9 +4147,11 @@ open class Terminal {
         if collect.count == 0 || collect != [32] { /* space */
             return
         }
-        let p = max (pars.count == 0 ? 1 : pars [0], 1)
+        let p = pars.count == 0 ? 0 : pars [0]
         switch (p) {
-        case 1, 0:
+        case 0:
+            setCursorStyle (defaultCursorStyle)
+        case 1:
             setCursorStyle (.blinkBlock)
         case 2:
             setCursorStyle (.steadyBlock)

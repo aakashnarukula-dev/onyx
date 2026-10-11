@@ -29,7 +29,7 @@ shift along (drop 3 on 1 in the three-pane layout and 1 moves down, 2 moves righ
 ![Three terminals: two stacked on the left, one on the right](docs/screenshots/three-terminals.png)
 
 New terminals start in `~/Developer` (home if it doesn't exist). Scrollback: 10,000 lines.
-The selected terminal has an orange border. There is no scroll bar; scroll with the trackpad.
+The cursor is a blinking line. The selected terminal has an orange border. There is no scroll bar; scroll with the trackpad.
 Each header shows the folder while the shell is in front, otherwise the running program's
 own title — for Claude, the task it is working on, renamed as the task changes.
 Closing the last window keeps Onyx running, like Terminal; click the Dock icon for a new one.
@@ -79,6 +79,7 @@ scripts/bundle.sh    # release build -> /Applications/Onyx.app
 
 SwiftTerm v1.20.0 is vendored in `Vendor/SwiftTerm` with its Metal shader left out of the
 build (the Command Line Tools have no `metal` compiler; Onyx uses the CoreText renderer).
+One patch: `CSI 0 SP q` restores the user's cursor shape (Onyx's blinking line) instead of a block.
 
 Test hooks (inert unless set): `ONYX_PANE_COMMAND`, `ONYX_SNAPSHOT` + `ONYX_SCRIPT`,
 `ONYX_TIMING` — see `Sources/Onyx/DebugHooks.swift`.

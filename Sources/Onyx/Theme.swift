@@ -5,6 +5,7 @@ import SwiftTerm
     static let background = NSColor.black
     static let foreground = hex(0xd4d4d4)
     static let cursor = NSColor.white
+    static let cursorStyle = CursorStyle.blinkBar
     static let divider = hex(0x1a1a1a)
     static let dotIdle = hex(0x3a3a3a)
     static let borderIdle = hex(0x222222)

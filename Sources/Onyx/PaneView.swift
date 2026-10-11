@@ -39,6 +39,9 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         terminal.caretColor = Theme.cursor
         terminal.installColors(Theme.ansi)
         terminal.optionAsMetaKey = true
+        // A blinking line cursor (Terminal.app's vertical bar), also when a program resets the shape.
+        terminal.getTerminal().defaultCursorStyle = Theme.cursorStyle
+        terminal.getTerminal().setCursorStyle(Theme.cursorStyle)
         terminal.processDelegate = self
         // Terminal.app keeps 10,000 lines by default; SwiftTerm's default is 500.
         terminal.changeScrollback(10_000)
