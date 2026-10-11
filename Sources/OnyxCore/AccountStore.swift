@@ -63,13 +63,23 @@ public struct AccountStore: Sendable {
     }
 
     /// Logins from `gh auth status` (it reports on stderr in some versions, stdout in others).
-    public func githubLogins() -> [String] {
+    public func githubLogins() -> [String] { ghStatus().map(\.login) }
+
+    /// The login `gh` itself currently treats as active.
+    public func githubActiveLogin() -> String? { ghStatus().first { $0.active }?.login }
+
+    private func ghStatus() -> [(login: String, active: Bool)] {
         let r = run(gh, ["auth", "status"], nil)
         let marker = "Logged in to github.com account "
-        return (r.out + "\n" + r.err).split(separator: "\n").compactMap { line in
-            guard let range = line.range(of: marker) else { return nil }
-            return line[range.upperBound...].split(separator: " ").first.map(String.init)
+        var out: [(login: String, active: Bool)] = []
+        for line in (r.out + "\n" + r.err).split(separator: "\n") {
+            if let range = line.range(of: marker), let login = line[range.upperBound...].split(separator: " ").first {
+                out.append((String(login), false))
+            } else if line.contains("Active account: true"), !out.isEmpty {
+                out[out.count - 1].active = true
+            }
         }
+        return out
     }
 
     public func githubToken(_ login: String) -> String? {

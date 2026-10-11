@@ -17,6 +17,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
         settings = Settings.load(paths)
+        if settings.activeGitHub == nil, let login = accounts.githubActiveLogin() {
+            settings.activeGitHub = login
+            try? settings.save(paths)
+        }
         promptPath = (try? PanePrompt.write(to: paths.home).path) ?? paths.prompt.path
         accountVars = SessionEnv.accountVars(settings: settings, accounts: accounts)
         cacheIdentity()
@@ -59,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
             frame = NSRect(x: screen.midX - size.width / 2, y: screen.midY - size.height / 2, width: size.width, height: size.height)
         }
         let c = WindowController(owner: self, frame: frame)
+        c.accessory = AccountsChip(app: self)
         controllers.append(c)
         c.showWindow(nil)
         c.addPane()
@@ -104,11 +109,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     // MARK: Accounts
 
-    /// Re-reads settings-driven account env (call after the active account changes).
+    /// Recomputes account env off the main thread (gh + maybe the GitHub API), then notifies.
     func refreshAccounts() {
-        accountVars = SessionEnv.accountVars(settings: settings, accounts: accounts)
-        cacheIdentity()
+        let settings = self.settings, accounts = self.accounts
+        DispatchQueue.global(qos: .userInitiated).async {
+            let vars = SessionEnv.accountVars(settings: settings, accounts: accounts)
+            DispatchQueue.main.async {
+                self.accountVars = vars
+                self.cacheIdentity()
+                NotificationCenter.default.post(name: .onyxAccountsChanged, object: nil)
+            }
+        }
         NotificationCenter.default.post(name: .onyxAccountsChanged, object: nil)
+    }
+
+    func setActiveGitHub(_ login: String) {
+        settings.activeGitHub = login
+        saveAndRefresh()
+    }
+
+    func setActiveVercel(_ label: String) {
+        settings.activeVercel = label
+        saveAndRefresh()
+    }
+
+    func setIdentity(_ id: GitHubIdentity) {
+        settings.identities[id.login] = id
+        saveAndRefresh()
+    }
+
+    func removeVercel(_ label: String) {
+        accounts.secrets.delete(label)
+        settings.vercelLabels.removeAll { $0 == label }
+        if settings.activeVercel == label { settings.activeVercel = settings.vercelLabels.first }
+        saveAndRefresh()
+    }
+
+    /// Validates the token with `vercel whoami`, then stores it in the Keychain and makes it active.
+    func addVercel(label: String, token: String, done: @escaping @MainActor (Bool) -> Void) {
+        let accounts = self.accounts
+        DispatchQueue.global(qos: .userInitiated).async {
+            let user = accounts.validateVercel(token: token)
+            DispatchQueue.main.async {
+                guard user != nil, (try? accounts.secrets.set(label, token)) != nil else { done(false); return }
+                if !self.settings.vercelLabels.contains(label) { self.settings.vercelLabels.append(label) }
+                self.settings.activeVercel = label
+                self.saveAndRefresh()
+                done(true)
+            }
+        }
+    }
+
+    private func saveAndRefresh() {
+        try? settings.save(paths)
+        refreshAccounts()
     }
 
     /// Remembers the API-reported commit identity so later launches skip the network call.
@@ -140,7 +194,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         controllers.forEach { $0.setFontSize(CGFloat(settings.fontSize)) }
     }
 
-    @objc func showSettings(_ sender: Any?) {}
+    private var settingsWindow: SettingsWindow?
+
+    @objc func showSettings(_ sender: Any?) {
+        if settingsWindow == nil { settingsWindow = SettingsWindow(app: self) }
+        settingsWindow?.showWindow(nil)
+        settingsWindow?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    var fontSize: Double { settings.fontSize }
+
+    func applyFontSize(_ size: Double) { setFont(size) }
 
     private func log(_ what: String) {
         guard timing else { return }

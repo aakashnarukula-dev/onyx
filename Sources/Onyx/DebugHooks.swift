@@ -23,6 +23,8 @@ enum DebugHooks {
             case "n": app.newPane(nil)
             case "w": if let k = Int(step.dropFirst()) { app.closePane(at: k) }
             case "s": app.snapshot(to: dir, step: i)
+            case "a": app.showSettings(nil)
+            case "g": app.setActiveGitHub(String(step.dropFirst()))
             case "d": app.dragFirstDivider(by: Double(step.dropFirst()) ?? 100)
             default: break
             }
@@ -54,6 +56,11 @@ extension AppDelegate {
     }
 
     func snapshot(to dir: String, step: Int) {
+        if let v = NSApp.windows.first(where: { $0.title == "Onyx Settings" && $0.isVisible })?.contentView,
+           let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
+            v.cacheDisplay(in: v.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/\(step)-settings.png"))
+        }
         for (w, c) in windowControllers.enumerated() {
             guard let view = c.window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
             view.cacheDisplay(in: view.bounds, to: rep)

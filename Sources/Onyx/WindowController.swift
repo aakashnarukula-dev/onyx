@@ -96,6 +96,8 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
         layoutTopBar()
     }
 
+    func relayoutTopBar() { layoutTopBar() }
+
     private func layoutTopBar() {
         let h = Theme.topBarHeight
         addButton.frame = CGRect(x: 78, y: (h - 22) / 2, width: 24, height: 22)

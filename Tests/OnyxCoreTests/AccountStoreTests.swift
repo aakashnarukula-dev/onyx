@@ -42,6 +42,12 @@ struct AccountStoreTests {
         #expect(store(r).githubLogins() == ["foo", "bar"])
     }
 
+    @Test func activeLoginFromGhStatus() {
+        let r = FakeRunner()
+        r.replies["gh auth status"] = (0, ghStatus.replacingOccurrences(of: "true", with: "X").replacingOccurrences(of: "false", with: "true"), "")
+        #expect(store(r).githubActiveLogin() == "bar")
+    }
+
     @Test func tokenFailureIsNil() {
         let r = FakeRunner()
         r.replies["gh auth token -u foo"] = (1, "", "no token")
