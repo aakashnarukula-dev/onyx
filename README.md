@@ -53,9 +53,11 @@ so `claude` is on your PATH; without it each terminal is a plain shell.
 ```
 git clone https://github.com/aakashnarukula-dev/onyx.git
 cd onyx
-scripts/bundle.sh          # builds (about 2 min the first time) and installs /Applications/Onyx.app
+scripts/bundle.sh          # builds (about 2 min the first time), installs /Applications/Onyx.app, pins it to the Dock
 open /Applications/Onyx.app
 ```
+
+The install pins Onyx to the Dock once (it never adds a second icon); set `ONYX_NO_DOCK=1` to skip that.
 
 Built on your Mac, so Gatekeeper doesn't block it. To update: `git pull && scripts/bundle.sh`
 (quit Onyx first). To uninstall: delete `/Applications/Onyx.app` and

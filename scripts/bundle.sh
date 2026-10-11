@@ -38,3 +38,11 @@ ditto "$APP" /Applications/Onyx.app
 # Leave only the installed copy, so Spotlight and launchers list one Onyx.
 rm -rf build
 echo "Installed /Applications/Onyx.app"
+
+# Pin to the Dock once (skip with ONYX_NO_DOCK=1); never adds a second icon.
+if [[ -z "${ONYX_NO_DOCK:-}" ]] && ! defaults read com.apple.dock persistent-apps 2>/dev/null | grep -q "file:///Applications/Onyx.app/"; then
+  defaults write com.apple.dock persistent-apps -array-add \
+    '<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>file:///Applications/Onyx.app/</string><key>_CFURLStringType</key><integer>15</integer></dict></dict><key>tile-type</key><string>file-tile</string></dict>'
+  killall Dock
+  echo "Pinned Onyx to the Dock"
+fi
