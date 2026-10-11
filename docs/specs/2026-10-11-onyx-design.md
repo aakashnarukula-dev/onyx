@@ -105,7 +105,7 @@ Goal: two panes never edit the same working tree at once, and pushes never race.
 **`onyx-pane` CLI** (on `PATH` inside panes):
 - `onyx-pane claim <dir> "<task>"` — registers this pane in the repo containing `<dir>`. If another live pane already holds that repo's main checkout, prints `USE_WORKTREE <path> <branch>` and creates the worktree at `<repo>/.onyx-worktrees/<short-id>` on branch `onyx/<short-id>` (dir added to `.git/info/exclude`). Otherwise prints `OK <repoRoot>`.
 - `onyx-pane who [<dir>]` — lists live panes in that repo and their tasks.
-- `onyx-pane push` — takes the per-repo lock (atomic `mkdir` lock holding the pid, waits up to 5 min, stale-lock steal when pid dead), then `git fetch` + `git rebase origin/<target>`; prints `CONFLICT <files>` and stops (lock released) or pushes and prints `PUSHED <sha>`. For a worktree branch, target is the repo's default branch: rebase, fast-forward main, push main, then `release` removes the worktree + branch.
+- `onyx-pane push` — takes the per-repo lock (atomic `mkdir` lock holding the pid, waits up to 5 min, stale-lock steal when pid dead), then `git fetch` + `git rebase origin/<target>`; prints `CONFLICT <files>` and stops (lock released) or pushes and prints `PUSHED <sha>`. For a worktree branch, target is the repo's default branch: rebase onto `origin/<default>`, push `HEAD` to `origin/<default>` (the main-checkout pane picks it up on its own next rebase); `release` then removes the merged worktree + branch. No `origin` → prints `NO_REMOTE`, exits 2, branch kept for the owner.
 - `onyx-pane release` — drops this pane's claim; removes its worktree if merged.
 
 **`PanePrompt`** (appended to every Claude session) tells Claude to:
