@@ -26,4 +26,6 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Onyx.icns"
 codesign --force --deep -s - "$APP"
 rm -rf /Applications/Onyx.app
 ditto "$APP" /Applications/Onyx.app
+# Leave only the installed copy, so Spotlight and launchers list one Onyx.
+rm -rf build
 echo "Installed /Applications/Onyx.app"
