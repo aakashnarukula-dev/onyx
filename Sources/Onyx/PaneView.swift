@@ -7,24 +7,20 @@ import SwiftTerm
     func paneProcessEnded(_ pane: PaneView)
 }
 
-/// One independent terminal: a thin header (title, account, close) over a SwiftTerm view.
+/// One independent terminal: a thin header (title, close) over a SwiftTerm view.
 final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
-    let id: String
     let terminal: LocalProcessTerminalView
     weak var delegate: PaneViewDelegate?
     private let header = PaneHeader()
-    private let registry: PaneRegistry
     private var closed = false
 
     var isFocused = false { didSet { updateFocusLook() } }
 
     private let cwd: String
 
-    /// Builds the view; the shell starts on `start(command:env:)`.
-    init(id: String, cwd: String, fontSize: CGFloat, registry: PaneRegistry) {
+    /// Builds the view; the shell starts on `start(shell:args:env:)`.
+    init(cwd: String, fontSize: CGFloat) {
         self.cwd = cwd
-        self.id = id
-        self.registry = registry
         terminal = LocalProcessTerminalView(frame: .zero)
         super.init(frame: .zero)
         wantsLayer = true
@@ -49,15 +45,11 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         updateFocusLook()
     }
 
-    /// Runs `command` inside an interactive login zsh; the pane falls back to a plain shell after it.
-    func start(command: String, env: [String: String], accountLabel: String?) {
+    func start(shell: String, args: [String], env: [String: String]) {
         guard !closed, !terminal.process.running else { return }
-        header.account = accountLabel
-        let shellCmd = "\(command); exec /bin/zsh -l -i"
-        terminal.startProcess(executable: "/bin/zsh", args: ["-l", "-i", "-c", shellCmd],
+        terminal.startProcess(executable: shell, args: args,
                               environment: env.map { "\($0.key)=\($0.value)" },
-                              execName: "-zsh", currentDirectory: cwd)
-        try? registry.markAlive(paneId: id, pid: terminal.process.shellPid)
+                              execName: "-" + (shell as NSString).lastPathComponent, currentDirectory: cwd)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -96,7 +88,6 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     func shutdown(wait: Bool = false) {
         guard !closed else { return }
         closed = true
-        registry.markClosed(paneId: id)
         let shell = terminal.process.shellPid
         guard terminal.process.running, shell > 0 else { return }
         let children = childPids(of: shell)
@@ -157,7 +148,6 @@ func childPids(of pid: pid_t) -> [pid_t] {
 /// The 24 pt strip above each terminal.
 final class PaneHeader: NSView {
     private let titleLabel = NSTextField(labelWithString: "")
-    private let accountLabel = NSTextField(labelWithString: "")
     private let closeButton = HoverButton(title: "×")
     private let dot = NSView()
     var onClose: (() -> Void)?
@@ -166,10 +156,6 @@ final class PaneHeader: NSView {
     var title: String {
         get { titleLabel.stringValue }
         set { titleLabel.stringValue = newValue }
-    }
-
-    var account: String? {
-        didSet { accountLabel.stringValue = account.map { "gh: \($0)" } ?? "" }
     }
 
     var focused = false {
@@ -183,16 +169,11 @@ final class PaneHeader: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = Theme.background.cgColor
-        for l in [titleLabel, accountLabel] {
-            l.lineBreakMode = .byTruncatingMiddle
-            l.cell?.usesSingleLineMode = true
-            addSubview(l)
-        }
+        titleLabel.lineBreakMode = .byTruncatingMiddle
+        titleLabel.cell?.usesSingleLineMode = true
+        addSubview(titleLabel)
         titleLabel.font = Theme.ui(11.5, .semibold)
         titleLabel.textColor = Theme.headerText
-        accountLabel.font = Theme.ui(10.5)
-        accountLabel.textColor = Theme.muted
-        accountLabel.alignment = .right
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 3
         dot.layer?.backgroundColor = Theme.borderFocused.cgColor
@@ -212,9 +193,7 @@ final class PaneHeader: NSView {
         let h = bounds.height
         dot.frame = CGRect(x: 10, y: (h - 6) / 2, width: 6, height: 6)
         closeButton.frame = CGRect(x: bounds.width - 24, y: (h - 18) / 2, width: 18, height: 18)
-        let accW = min(160, accountLabel.intrinsicContentSize.width)
-        accountLabel.frame = CGRect(x: closeButton.frame.minX - 8 - accW, y: (h - 14) / 2, width: accW, height: 14)
-        titleLabel.frame = CGRect(x: 22, y: (h - 15) / 2, width: max(0, accountLabel.frame.minX - 30), height: 15)
+        titleLabel.frame = CGRect(x: 22, y: (h - 15) / 2, width: max(0, closeButton.frame.minX - 30), height: 15)
     }
 
     override func mouseDown(with event: NSEvent) { onClick?() }

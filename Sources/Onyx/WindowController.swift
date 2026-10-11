@@ -12,7 +12,7 @@ final class OnyxWindow: NSWindow {
     }
 }
 
-/// Top strip: room for the traffic lights, the `+` button and the accounts chip.
+/// Top strip: room for the traffic lights and the `+` button.
 final class TopBar: NSView {
     override var mouseDownCanMoveWindow: Bool { true }
     override var isFlipped: Bool { true }
@@ -36,15 +36,6 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
     private let countLabel = NSTextField(labelWithString: "")
     private(set) var panes: [PaneView] = []
     private(set) weak var focused: PaneView?
-    /// Right-hand slot in the top bar (accounts chip).
-    var accessory: NSView? {
-        didSet {
-            oldValue?.removeFromSuperview()
-            if let accessory { topBar.addSubview(accessory) }
-            layoutTopBar()
-        }
-    }
-
     var canAddPane: Bool { panes.count < GridLayout.maxPanes }
 
     init(owner: WindowControllerDelegate, frame: NSRect) {
@@ -96,17 +87,11 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
         layoutTopBar()
     }
 
-    func relayoutTopBar() { layoutTopBar() }
-
     private func layoutTopBar() {
         let h = Theme.topBarHeight
         addButton.frame = CGRect(x: 78, y: (h - 22) / 2, width: 24, height: 22)
         countLabel.sizeToFit()
         countLabel.frame.origin = CGPoint(x: addButton.frame.maxX + 6, y: (h - countLabel.frame.height) / 2)
-        if let accessory {
-            let s = accessory.fittingSize
-            accessory.frame = CGRect(x: topBar.bounds.width - s.width - 10, y: (h - s.height) / 2, width: s.width, height: s.height)
-        }
     }
 
     @objc private func addTapped() {

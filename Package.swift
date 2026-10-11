@@ -6,7 +6,6 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "Onyx", targets: ["Onyx"]),
-        .executable(name: "onyx-pane", targets: ["onyx-pane"]),
     ],
     dependencies: [
         .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.11.2"),
@@ -17,7 +16,6 @@ let package = Package(
             name: "Onyx",
             dependencies: ["OnyxCore", .product(name: "SwiftTerm", package: "SwiftTerm")]
         ),
-        .executableTarget(name: "onyx-pane", dependencies: ["OnyxCore"]),
         .testTarget(name: "OnyxCoreTests", dependencies: ["OnyxCore"]),
     ]
 )

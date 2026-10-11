@@ -20,14 +20,4 @@ public enum Shell {
         while !reader.isFinished { usleep(1000) }
         return (p.terminationStatus, String(decoding: outData, as: UTF8.self), String(decoding: errData, as: UTF8.self))
     }
-
-    /// Finds a CLI tool. Apps launched from Finder get a bare PATH, so Homebrew dirs are checked too.
-    public static func which(_ name: String, path: String? = ProcessInfo.processInfo.environment["PATH"]) -> String {
-        let dirs = (path ?? "").split(separator: ":").map(String.init)
-            + ["/opt/homebrew/bin", "/usr/local/bin", NSHomeDirectory() + "/.local/bin", "/usr/bin", "/bin"]
-        for d in dirs where FileManager.default.isExecutableFile(atPath: d + "/" + name) {
-            return d + "/" + name
-        }
-        return "/usr/bin/env"
-    }
 }

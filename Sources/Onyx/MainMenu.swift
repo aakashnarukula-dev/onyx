@@ -7,8 +7,6 @@ enum MainMenu {
         let app = submenu(main, "Onyx")
         app.addItem(withTitle: "About Onyx", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(item("Settings…", #selector(AppDelegate.showSettings(_:)), ","))
-        app.addItem(.separator())
         app.addItem(withTitle: "Hide Onyx", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]))
         app.addItem(.separator())
