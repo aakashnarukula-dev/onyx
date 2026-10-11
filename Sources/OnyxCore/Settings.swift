@@ -2,7 +2,7 @@ import Foundation
 
 /// App settings (`settings.json`): just the font size.
 public struct Settings: Codable, Equatable, Sendable {
-    public var fontSize: Double = 13
+    public var fontSize: Double = 11
 
     public init() {}
 

@@ -19,7 +19,7 @@ for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in
 | `⌘`-click | Open a link |
 | `⌘1`…`⌘6` | Focus terminal |
 | `⌘⌥←↑↓→` | Move focus |
-| `⌘+` / `⌘-` / `⌘0` | Font bigger / smaller / default |
+| `⌘+` / `⌘-` / `⌘0` | Font bigger / smaller / default (11 pt) |
 
 Layout follows the count: 1 full, 2 side by side, 3 = two stacked left + one right,
 4 = 2×2, 5 = 2+2+1, 6 = 3×2. Drag the gaps to resize; adding or closing re-flows.

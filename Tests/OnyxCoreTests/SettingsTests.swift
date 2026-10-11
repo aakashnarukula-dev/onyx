@@ -3,6 +3,10 @@ import Testing
 @testable import OnyxCore
 
 struct SettingsTests {
+    @Test func defaultFontIsElevenPoints() {
+        #expect(Settings().fontSize == 11)
+    }
+
     @Test func corruptFileGivesDefaults() throws {
         let paths = tempPaths()
         try FileManager.default.createDirectory(at: paths.home, withIntermediateDirectories: true)
