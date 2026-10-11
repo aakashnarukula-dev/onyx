@@ -52,3 +52,7 @@ build (the Command Line Tools have no `metal` compiler; Onyx uses the CoreText r
 
 Test hooks (inert unless set): `ONYX_PANE_COMMAND`, `ONYX_SNAPSHOT` + `ONYX_SCRIPT`,
 `ONYX_TIMING` — see `Sources/Onyx/DebugHooks.swift`.
+
+## License
+
+MIT — see `LICENSE`. SwiftTerm (in `Vendor/SwiftTerm`) keeps its own MIT license.
