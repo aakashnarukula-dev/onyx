@@ -15,12 +15,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         NSApp.mainMenu = MainMenu.build()
         settings = Settings.load(paths)
         zshDir = (try? ZshIntegration.write(to: paths.home.appendingPathComponent("zsh")).path) ?? ""
-        if let saved = keepsSession ? SessionState.load(paths) : nil, !saved.windows.isEmpty {
+        if let saved = usesRealHome ? SessionState.load(paths) : nil, !saved.windows.isEmpty {
             saved.windows.forEach(reopen)
         } else {
             newWindow(nil)
         }
-        if keepsSession {
+        if usesRealHome {
             // Kept current all the time, so a force quit or crash still leaves it behind.
             sessionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.saveSession() }
@@ -101,8 +101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     private let claude = ClaudeSessions()
     private var sessionTimer: Timer?
     private var terminating = false
-    /// Test runs (`ONYX_SNAPSHOT`) leave the real session alone unless given their own ONYX_HOME.
-    private var keepsSession: Bool {
+    /// Test runs (`ONYX_SNAPSHOT`) leave the real session and settings alone unless given their own ONYX_HOME.
+    private var usesRealHome: Bool {
         DebugHooks.env["ONYX_SNAPSHOT"] == nil || DebugHooks.env["ONYX_HOME"] != nil
     }
 
@@ -121,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     }
 
     func saveSession() {
-        guard keepsSession, !terminating else { return }
+        guard usesRealHome, !terminating else { return }
         let windows = controllers.compactMap { c -> SessionState.Window? in
             guard let f = c.window?.frame, !c.panes.isEmpty else { return nil }
             return .init(frame: [f.minX, f.minY, f.width, f.height], panes: c.panes.map { $0.sessionPane(claude) })
@@ -132,13 +132,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     func makePane(for controller: WindowController, restoring: SessionState.Pane?) -> PaneView {
         var cwd = FileManager.default.fileExists(atPath: developerDir) ? developerDir : NSHomeDirectory()
         var command = PaneEnv.claudeCommand
+        var resuming: SessionState.Pane?
         if let restoring {
             var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: restoring.cwd, isDirectory: &isDir), isDir.boolValue { cwd = restoring.cwd }
-            // Back into the same conversation; one that never got a message starts fresh.
-            if let id = restoring.claudeSession, claude.hasTranscript(id: id) { command = ClaudeSessions.resumeCommand(id: id) }
+            let folderThere = FileManager.default.fileExists(atPath: restoring.cwd, isDirectory: &isDir) && isDir.boolValue
+            if folderThere { cwd = restoring.cwd }
+            // Back into the same conversation. Claude finds it by folder, so only in its own folder;
+            // one that never got a message starts fresh.
+            if folderThere, let id = restoring.claudeSession, claude.hasTranscript(id: id) {
+                command = ClaudeSessions.resumeCommand(id: id)
+                resuming = restoring
+            }
         }
         let pane = PaneView(cwd: cwd, fontSize: CGFloat(settings.fontSize))
+        pane.resuming = resuming
         let base = ProcessInfo.processInfo.environment
         let launch = PaneEnv.launch(shell: shell, firstCommand: DebugHooks.paneCommand ?? command,
                                     zdotdir: zshDir, userZdotdir: base["ZDOTDIR"])
@@ -174,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     private func setFont(_ size: Double) {
         settings.fontSize = min(max(size, 9), 28)
-        try? settings.save(paths)
+        if usesRealHome { try? settings.save(paths) }  // test runs don't touch the real settings
         controllers.forEach { $0.setFontSize(CGFloat(settings.fontSize)) }
     }
 

@@ -148,11 +148,16 @@ final class GridView: NSView {
         let slots: [CGRect]
         let grab: CGPoint  // cursor offset inside the dragged pane
         let placeholder: NSView
+        let token: Int
+        var dropping = false  // released; settling into place
     }
 
     private var move: Move?
+    private var moveCount = 0
 
     private func headerDrag(_ pane: PaneView, _ phase: PaneHeader.DragPhase, _ event: NSEvent) {
+        // Only the pane being moved steers the move; a grab while another is settling is ignored.
+        if let m = move, m.pane !== pane || m.dropping { return }
         let p = convert(event.locationInWindow, from: nil)
         switch phase {
         case .began: beginMove(pane, at: p)
@@ -175,8 +180,10 @@ final class GridView: NSView {
         pane.layer?.shadowOpacity = 0.7
         pane.layer?.shadowRadius = 16
         pane.alphaValue = 0.94
+        moveCount += 1
         move = Move(pane: pane, from: from, to: from, slots: panes.map(\.frame),
-                    grab: CGPoint(x: p.x - pane.frame.minX, y: p.y - pane.frame.minY), placeholder: placeholder)
+                    grab: CGPoint(x: p.x - pane.frame.minX, y: p.y - pane.frame.minY), placeholder: placeholder,
+                    token: moveCount)
         NSCursor.closedHand.push()
     }
 
@@ -203,7 +210,9 @@ final class GridView: NSView {
     }
 
     private func endMove() {
-        guard let m = move else { return }
+        guard var m = move, !m.dropping else { return }
+        m.dropping = true
+        move = m
         let order = GridLayout.moving(panes, from: m.from, to: m.to)
         let slot = m.slots[m.to]
         NSAnimationContext.runAnimationGroup({ ctx in
@@ -214,7 +223,7 @@ final class GridView: NSView {
             m.pane.animator().alphaValue = 1
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.move?.pane === m.pane else { return }
+                guard let self, self.move?.token == m.token else { return }  // not cancelled meanwhile
                 self.cancelMove()
                 // Same count, so the divider sizes stay with their places; panes take the size of their new place.
                 self.panes = order

@@ -83,6 +83,13 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
 
     var headerTitle: String { header.title }
 
+    /// Text of the top visible row (tests: did scrolling move the view?).
+    func topLine() -> String {
+        let t = terminal.getTerminal()
+        guard let line = t.getLine(row: 0) else { return "" }
+        return lineText(line, trimRight: true)
+    }
+
     func getTerminalSize() -> (cols: Int, rows: Int, lines: Int) {
         let t = terminal.getTerminal()
         return (t.cols, t.rows, t.buffer.yDisp + t.rows)
@@ -140,12 +147,21 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     /// folder), else the shell's folder.
     func sessionPane(_ claude: ClaudeSessions) -> SessionState.Pane {
         let shell = terminal.process.shellPid
-        guard !closed, terminal.process.running, shell > 0 else { return .init(cwd: cwd, claudeSession: nil) }
+        guard !closed, terminal.process.running, shell > 0 else { return resuming ?? .init(cwd: cwd, claudeSession: nil) }
         for pid in childPids(of: shell) {
-            if let s = claude.running(pid: pid) { return .init(cwd: s.cwd, claudeSession: s.id) }
+            if let s = claude.running(pid: pid) {
+                resuming = nil
+                return .init(cwd: s.cwd, claudeSession: s.id)
+            }
         }
-        return .init(cwd: currentDirectory(of: shell) ?? cwd, claudeSession: nil)
+        // A reopened conversation counts as here until its Claude has been seen running: it may
+        // still be starting, or `--resume` may have failed (login expired, Ctrl-C) — either way
+        // quitting now must not lose it.
+        return resuming ?? .init(cwd: currentDirectory(of: shell) ?? cwd, claudeSession: nil)
     }
+
+    /// The saved conversation this pane was reopened to resume, until Claude is seen running.
+    var resuming: SessionState.Pane?
 
     /// True while something other than the bare shell runs in the pane (Claude, a build, …).
     var isBusy: Bool {

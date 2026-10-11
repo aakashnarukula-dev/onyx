@@ -193,6 +193,7 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
 
     func windowWillClose(_ notification: Notification) {
         titleTimer?.invalidate()
+        grid.setPanes([])  // ends a pane drag still in progress (and its cursor)
         panes.forEach { $0.shutdown() }
         panes.removeAll()
         host?.windowControllerDidClose(self)

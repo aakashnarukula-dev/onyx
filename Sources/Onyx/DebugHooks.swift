@@ -42,7 +42,11 @@ enum DebugHooks {
                 let parts = step.dropFirst().split(separator: ".").compactMap { Int($0) }
                 if parts.count == 2 { app.grabPane(parts[0], over: parts[1]) }
             case "u": app.releasePane()
+            case "Q":  // release, and at once grab pane 1 over place 0 (a grab during the drop animation)
+                app.releasePane()
+                app.grabPane(1, over: 0)
             case "X": kill(getpid(), SIGKILL)  // force quit
+            case "W": if let k = Int(step.dropFirst()) { app.scrollUp(pane: k) }
             default: break
             }
             let delay = step == "s" ? 0.2 : step == "P" ? 10 : 0.8
@@ -189,6 +193,17 @@ extension AppDelegate {
                            context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
     }
 
+    /// A trackpad-style scroll up over pane `index`.
+    func scrollUp(pane index: Int) {
+        guard let c = windowControllers.last, c.panes.indices.contains(index) else { return }
+        let t = c.panes[index].terminal
+        for _ in 0..<5 {
+            guard let cg = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 5, wheel2: 0, wheel3: 0),
+                  let e = NSEvent(cgEvent: cg) else { continue }
+            t.scrollWheel(with: e)
+        }
+    }
+
     func snapshot(to dir: String, step: Int) {
         for (w, c) in windowControllers.enumerated() {
             guard let view = c.window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
@@ -200,7 +215,7 @@ extension AppDelegate {
             report(dir, "snapshot step \(step) window \(w): \(c.panes.count) panes \(summary)")
             for (i, p) in c.panes.enumerated() {
                 let t = p.getTerminalSize()
-                report(dir, "  pane \(i) focused=\(c.focused === p) title=[\(p.headerTitle)] running=\(p.terminal.process.running) busy=\(p.isBusy) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
+                report(dir, "  pane \(i) focused=\(c.focused === p) scrollbar=\(p.terminal.subviews.contains { $0 is NSScroller && !$0.isHidden }) width=\(Int(p.terminal.frame.width)) used=\(Int(p.terminal.getOptimalFrameSize().width)) top=[\(p.topLine())] title=[\(p.headerTitle)] running=\(p.terminal.process.running) busy=\(p.isBusy) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
             }
             // The terminal leaves its default background transparent (the layer shows black
             // behind it on screen), so lay the picture over black as the window looks.
