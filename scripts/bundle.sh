@@ -2,6 +2,15 @@
 # Builds Onyx.app (release) and installs it to /Applications.
 set -euo pipefail
 cd "${0:A:h}/.."
+
+if ! xcrun --find swift >/dev/null 2>&1; then
+  echo "Swift not found. Install Apple's Command Line Tools (xcode-select --install) or Xcode, then run this again." >&2
+  exit 1
+fi
+if [[ "$(sw_vers -productVersion | cut -d. -f1)" -lt 14 ]]; then
+  echo "Onyx needs macOS 14 (Sonoma) or newer." >&2
+  exit 1
+fi
 source scripts/env.sh
 
 swift build -c release

@@ -44,9 +44,26 @@ started yourself, or one after `/clear`, is followed too. A conversation with no
 starts fresh, and if none had messages Onyx doesn't ask and just opens one terminal; programs other than Claude (dev servers, ssh) don't come back; a window you
 close on purpose doesn't come back.
 
-## Build
+## Install
 
-Needs only the Command Line Tools.
+Needs macOS 14 or newer and Apple's Command Line Tools (`xcode-select --install`) or Xcode.
+For terminals to start Claude, install [Claude Code](https://docs.claude.com/en/docs/claude-code)
+so `claude` is on your PATH; without it each terminal is a plain shell.
+
+```
+git clone https://github.com/aakashnarukula-dev/onyx.git
+cd onyx
+scripts/bundle.sh          # builds (about 2 min the first time) and installs /Applications/Onyx.app
+open /Applications/Onyx.app
+```
+
+Built on your Mac, so Gatekeeper doesn't block it. To update: `git pull && scripts/bundle.sh`
+(quit Onyx first). To uninstall: delete `/Applications/Onyx.app` and
+`~/Library/Application Support/Onyx`.
+
+New terminals start in `~/Developer`, or your home folder if that doesn't exist.
+
+## Build
 
 ```
 scripts/test.sh      # unit tests (Swift Testing)
