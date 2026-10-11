@@ -42,6 +42,7 @@ enum DebugHooks {
                 let parts = step.dropFirst().split(separator: ".").compactMap { Int($0) }
                 if parts.count == 2 { app.grabPane(parts[0], over: parts[1]) }
             case "u": app.releasePane()
+            case "X": kill(getpid(), SIGKILL)  // force quit
             default: break
             }
             let delay = step == "s" ? 0.2 : step == "P" ? 10 : 0.8
@@ -199,7 +200,7 @@ extension AppDelegate {
             report(dir, "snapshot step \(step) window \(w): \(c.panes.count) panes \(summary)")
             for (i, p) in c.panes.enumerated() {
                 let t = p.getTerminalSize()
-                report(dir, "  pane \(i) title=[\(p.headerTitle)] running=\(p.terminal.process.running) busy=\(p.isBusy) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
+                report(dir, "  pane \(i) focused=\(c.focused === p) title=[\(p.headerTitle)] running=\(p.terminal.process.running) busy=\(p.isBusy) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
             }
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/\(step)-\(w).png"))
         }

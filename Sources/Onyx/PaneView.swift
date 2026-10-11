@@ -41,6 +41,8 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         terminal.processDelegate = self
         // Terminal.app keeps 10,000 lines by default; SwiftTerm's default is 500.
         terminal.changeScrollback(10_000)
+        // No scroll bar (trackpad / wheel still scroll); SwiftTerm gives its width back to the text.
+        terminal.subviews.compactMap { $0 as? NSScroller }.forEach { $0.isHidden = true }
 
         header.title = (cwd as NSString).abbreviatingWithTildeInPath
         header.onClose = { [weak self] in self?.requestClose() }
@@ -134,6 +136,17 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
 
     func requestClose() { delegate?.paneWantsClose(self) }
 
+    /// What to reopen this terminal as: the Claude conversation running in it (in Claude's
+    /// folder), else the shell's folder.
+    func sessionPane(_ claude: ClaudeSessions) -> SessionState.Pane {
+        let shell = terminal.process.shellPid
+        guard !closed, terminal.process.running, shell > 0 else { return .init(cwd: cwd, claudeSession: nil) }
+        for pid in childPids(of: shell) {
+            if let s = claude.running(pid: pid) { return .init(cwd: s.cwd, claudeSession: s.id) }
+        }
+        return .init(cwd: currentDirectory(of: shell) ?? cwd, claudeSession: nil)
+    }
+
     /// True while something other than the bare shell runs in the pane (Claude, a build, …).
     var isBusy: Bool {
         guard !closed, terminal.process.running else { return false }
@@ -161,7 +174,8 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     }
 
     private func updateFocusLook() {
-        layer?.borderColor = (isFocused ? Theme.borderFocused : Theme.borderIdle).cgColor
+        layer?.borderColor = (isFocused ? Theme.accent : Theme.borderIdle).cgColor
+        layer?.borderWidth = isFocused ? 1.5 : 1
         header.focused = isFocused
     }
 
@@ -255,7 +269,7 @@ final class PaneHeader: NSView {
     var focused = false {
         didSet {
             titleLabel.textColor = focused ? Theme.headerTextFocused : Theme.headerText
-            dot.layer?.backgroundColor = (focused ? Theme.accent : Theme.borderFocused).cgColor
+            dot.layer?.backgroundColor = (focused ? Theme.accent : Theme.dotIdle).cgColor
         }
     }
 
@@ -270,7 +284,7 @@ final class PaneHeader: NSView {
         titleLabel.textColor = Theme.headerText
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 3
-        dot.layer?.backgroundColor = Theme.borderFocused.cgColor
+        dot.layer?.backgroundColor = Theme.dotIdle.cgColor
         addSubview(dot)
         closeButton.target = self
         closeButton.action = #selector(closeTapped)

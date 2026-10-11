@@ -24,9 +24,19 @@ Layout follows the count: 1 full, 2 side by side, 3 = two stacked left + one rig
 Drag a terminal by its header onto another's place to move it there; the ones in between
 shift along (drop 3 on 1 in the three-pane layout and 1 moves down, 2 moves right).
 New terminals start in `~/Developer` (home if it doesn't exist). Scrollback: 10,000 lines.
+The selected terminal has an orange border. There is no scroll bar; scroll with the trackpad.
 Each header shows the folder while the shell is in front, otherwise the running program's
 own title — for Claude, the task it is working on, renamed as the task changes.
 Closing the last window keeps Onyx running, like Terminal; click the Dock icon for a new one.
+
+**Reopening.** Onyx keeps a record of what is open (`~/Library/Application Support/Onyx/session.json`,
+updated every 2 s), so after quitting — or a force quit or crash — the next launch brings back
+the same windows, terminals and order, each Claude back in its conversation
+(`claude --resume <id> --permission-mode auto`, in the folder Claude ran in). Which conversation
+a terminal holds is read from Claude's own `~/.claude/sessions/<pid>.json`, so a Claude you
+started yourself, or one after `/clear`, is followed too. A conversation with no messages yet
+starts fresh; programs other than Claude (dev servers, ssh) don't come back; a window you
+close on purpose doesn't come back.
 
 ## Build
 

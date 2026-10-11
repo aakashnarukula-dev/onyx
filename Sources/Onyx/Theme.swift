@@ -6,8 +6,8 @@ import SwiftTerm
     static let foreground = hex(0xd4d4d4)
     static let cursor = NSColor.white
     static let divider = hex(0x1a1a1a)
-    static let borderFocused = hex(0x2a2a2a)
-    static let borderIdle = hex(0x111111)
+    static let dotIdle = hex(0x3a3a3a)
+    static let borderIdle = hex(0x222222)
     static let headerText = hex(0x8a8a8a)
     static let headerTextFocused = hex(0xe6e6e6)
     static let muted = hex(0x6b6b6b)

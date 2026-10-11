@@ -14,4 +14,5 @@ public struct OnyxPaths: Sendable {
     }
 
     public var settings: URL { home.appendingPathComponent("settings.json") }
+    public var session: URL { home.appendingPathComponent("session.json") }
 }

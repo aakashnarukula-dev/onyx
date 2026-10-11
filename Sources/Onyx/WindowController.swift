@@ -29,7 +29,7 @@ final class TopBar: NSView {
 }
 
 @MainActor protocol WindowControllerDelegate: AnyObject {
-    func makePane(for controller: WindowController) -> PaneView
+    func makePane(for controller: WindowController, restoring: SessionState.Pane?) -> PaneView
     func windowControllerDidClose(_ controller: WindowController)
 }
 
@@ -113,9 +113,10 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
 
     // MARK: Panes
 
-    func addPane() {
+    /// Adds a terminal; `restoring` reopens one saved from a previous run.
+    func addPane(restoring: SessionState.Pane? = nil) {
         guard canAddPane, let host else { return }
-        let pane = host.makePane(for: self)
+        let pane = host.makePane(for: self, restoring: restoring)
         pane.delegate = self
         panes.append(pane)
         grid.setPanes(panes)
@@ -199,14 +200,21 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
 }
 
 /// "Claude is still running" confirmation. True means go ahead and close.
+/// Quitting keeps the Claude conversations (they reopen next launch); closing doesn't.
 @MainActor
-func confirmClose(busy: Int) -> Bool {
+func confirmClose(busy: Int, quitting: Bool = false) -> Bool {
     let alert = NSAlert()
-    alert.messageText = busy == 1 ? "Close this terminal?" : "Close \(busy) busy terminals?"
-    alert.informativeText = busy == 1
-        ? "Something is still running in it (likely Claude). Closing ends it."
-        : "Something is still running in them (likely Claude). Closing ends it."
-    alert.addButton(withTitle: "Close")
+    if quitting {
+        alert.messageText = "Quit Onyx?"
+        alert.informativeText = (busy == 1 ? "1 terminal is busy." : "\(busy) terminals are busy.")
+            + " Claude conversations reopen next time you open Onyx; anything else running ends."
+    } else {
+        alert.messageText = busy == 1 ? "Close this terminal?" : "Close \(busy) busy terminals?"
+        alert.informativeText = busy == 1
+            ? "Something is still running in it (likely Claude). Closing ends it."
+            : "Something is still running in them (likely Claude). Closing ends it."
+    }
+    alert.addButton(withTitle: quitting ? "Quit" : "Close")
     alert.addButton(withTitle: "Cancel")
     return alert.runModal() == .alertFirstButtonReturn
 }

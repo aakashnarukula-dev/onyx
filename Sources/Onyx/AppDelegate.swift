@@ -15,7 +15,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         NSApp.mainMenu = MainMenu.build()
         settings = Settings.load(paths)
         zshDir = (try? ZshIntegration.write(to: paths.home.appendingPathComponent("zsh")).path) ?? ""
-        newWindow(nil)
+        if let saved = keepsSession ? SessionState.load(paths) : nil, !saved.windows.isEmpty {
+            saved.windows.forEach(reopen)
+        } else {
+            newWindow(nil)
+        }
+        if keepsSession {
+            // Kept current all the time, so a force quit or crash still leaves it behind.
+            sessionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.saveSession() }
+            }
+        }
         NSApp.activate(ignoringOtherApps: true)
         log("first pane")
         DebugHooks.runScriptIfAny(self)
@@ -32,9 +42,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if DebugHooks.env["ONYX_SNAPSHOT"] != nil { return .terminateNow }
         let busy = controllers.flatMap(\.panes).filter(\.isBusy).count
-        return busy == 0 || confirmClose(busy: busy) ? .terminateNow : .terminateCancel
+        guard DebugHooks.env["ONYX_SNAPSHOT"] != nil || busy == 0 || confirmClose(busy: busy, quitting: true) else {
+            return .terminateCancel
+        }
+        // Record what is open before the panes stop, then stop recording.
+        saveSession()
+        terminating = true
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -67,9 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         if let last = current?.window?.frame {
             frame = last.offsetBy(dx: 28, dy: -28)
         } else {
-            let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-            let size = CGSize(width: min(1280, screen.width * 0.85), height: min(820, screen.height * 0.85))
-            frame = NSRect(x: screen.midX - size.width / 2, y: screen.midY - size.height / 2, width: size.width, height: size.height)
+            frame = defaultFrame
         }
         let c = WindowController(owner: self, frame: frame)
         controllers.append(c)
@@ -77,11 +90,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         c.addPane()
     }
 
-    func makePane(for controller: WindowController) -> PaneView {
-        let cwd = FileManager.default.fileExists(atPath: developerDir) ? developerDir : NSHomeDirectory()
+    private var defaultFrame: NSRect {
+        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let size = CGSize(width: min(1280, screen.width * 0.85), height: min(820, screen.height * 0.85))
+        return NSRect(x: screen.midX - size.width / 2, y: screen.midY - size.height / 2, width: size.width, height: size.height)
+    }
+
+    // MARK: Reopening what was open
+
+    private let claude = ClaudeSessions()
+    private var sessionTimer: Timer?
+    private var terminating = false
+    /// Test runs (`ONYX_SNAPSHOT`) leave the real session alone unless given their own ONYX_HOME.
+    private var keepsSession: Bool {
+        DebugHooks.env["ONYX_SNAPSHOT"] == nil || DebugHooks.env["ONYX_HOME"] != nil
+    }
+
+    /// Opens a saved window: same place (if still on a screen), same terminals in the same order.
+    private func reopen(_ saved: SessionState.Window) {
+        var frame = defaultFrame
+        if saved.frame.count == 4 {
+            let f = NSRect(x: saved.frame[0], y: saved.frame[1], width: saved.frame[2], height: saved.frame[3])
+            if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(f) }) { frame = f }
+        }
+        let c = WindowController(owner: self, frame: frame)
+        controllers.append(c)
+        c.showWindow(nil)
+        let panes = saved.panes.isEmpty ? [nil] : saved.panes.prefix(GridLayout.maxPanes).map { Optional($0) }
+        panes.forEach { c.addPane(restoring: $0) }
+    }
+
+    func saveSession() {
+        guard keepsSession, !terminating else { return }
+        let windows = controllers.compactMap { c -> SessionState.Window? in
+            guard let f = c.window?.frame, !c.panes.isEmpty else { return nil }
+            return .init(frame: [f.minX, f.minY, f.width, f.height], panes: c.panes.map { $0.sessionPane(claude) })
+        }
+        try? SessionState(windows: windows).save(paths)
+    }
+
+    func makePane(for controller: WindowController, restoring: SessionState.Pane?) -> PaneView {
+        var cwd = FileManager.default.fileExists(atPath: developerDir) ? developerDir : NSHomeDirectory()
+        var command = PaneEnv.claudeCommand
+        if let restoring {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: restoring.cwd, isDirectory: &isDir), isDir.boolValue { cwd = restoring.cwd }
+            // Back into the same conversation; one that never got a message starts fresh.
+            if let id = restoring.claudeSession, claude.hasTranscript(id: id) { command = ClaudeSessions.resumeCommand(id: id) }
+        }
         let pane = PaneView(cwd: cwd, fontSize: CGFloat(settings.fontSize))
         let base = ProcessInfo.processInfo.environment
-        let launch = PaneEnv.launch(shell: shell, firstCommand: DebugHooks.paneCommand ?? PaneEnv.claudeCommand,
+        let launch = PaneEnv.launch(shell: shell, firstCommand: DebugHooks.paneCommand ?? command,
                                     zdotdir: zshDir, userZdotdir: base["ZDOTDIR"])
         pane.start(shell: shell, args: launch.args, execName: launch.execName,
                    env: PaneEnv.build(base: base).merging(launch.env) { _, new in new })
@@ -90,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     func windowControllerDidClose(_ controller: WindowController) {
         controllers.removeAll { $0 === controller }
+        saveSession()  // a window closed on purpose doesn't come back
     }
 
     private var developerDir: String { NSHomeDirectory() + "/Developer" }
