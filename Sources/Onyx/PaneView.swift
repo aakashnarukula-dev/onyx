@@ -11,7 +11,9 @@ import SwiftTerm
 final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     let terminal: LocalProcessTerminalView
     weak var delegate: PaneViewDelegate?
-    private let header = PaneHeader()
+    /// Dragging the header moves the pane to another place in the grid.
+    var onHeaderDrag: ((PaneView, PaneHeader.DragPhase, NSEvent) -> Void)?
+    let header = PaneHeader()
     private var closed = false
 
     var isFocused = false { didSet { updateFocusLook() } }
@@ -27,6 +29,8 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         wantsLayer = true
         layer?.backgroundColor = Theme.background.cgColor
         layer?.borderWidth = 1
+        layer?.cornerRadius = Theme.cornerRadius
+        layer?.cornerCurve = .continuous
 
         terminal.font = Theme.font(size: fontSize)
         terminal.nativeBackgroundColor = Theme.background
@@ -41,6 +45,10 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         header.title = (cwd as NSString).abbreviatingWithTildeInPath
         header.onClose = { [weak self] in self?.requestClose() }
         header.onClick = { [weak self] in self?.focus() }
+        header.onDrag = { [weak self] phase, event in
+            guard let self else { return }
+            self.onHeaderDrag?(self, phase, event)
+        }
         addSubview(header)
         addSubview(terminal)
         updateFocusLook()
@@ -60,8 +68,9 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     override func layout() {
         super.layout()
         header.frame = CGRect(x: 0, y: 0, width: bounds.width, height: Theme.headerHeight)
-        terminal.frame = CGRect(x: 1, y: Theme.headerHeight, width: max(0, bounds.width - 2),
-                                height: max(0, bounds.height - Theme.headerHeight - 1))
+        // Inset so the text clears the rounded corners.
+        terminal.frame = CGRect(x: Theme.padding, y: Theme.headerHeight, width: max(0, bounds.width - Theme.padding * 2),
+                                height: max(0, bounds.height - Theme.headerHeight - Theme.padding))
     }
 
     /// One Character per cell; emoji and other non-BMP characters resolved through the terminal.
@@ -281,7 +290,36 @@ final class PaneHeader: NSView {
         titleLabel.frame = CGRect(x: 22, y: (h - 15) / 2, width: max(0, closeButton.frame.minX - 30), height: 15)
     }
 
-    override func mouseDown(with event: NSEvent) { onClick?() }
+    enum DragPhase { case began, moved, ended }
+    var onDrag: ((DragPhase, NSEvent) -> Void)?
+    private var downAt: CGPoint?
+    private var dragging = false
+
+    override func mouseDown(with event: NSEvent) {
+        onClick?()
+        downAt = event.locationInWindow
+        dragging = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let downAt else { return }
+        let p = event.locationInWindow
+        if !dragging, hypot(p.x - downAt.x, p.y - downAt.y) > 4 {
+            dragging = true
+            onDrag?(.began, event)
+        }
+        if dragging { onDrag?(.moved, event) }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if dragging { onDrag?(.ended, event) }
+        downAt = nil
+        dragging = false
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(CGRect(x: 0, y: 0, width: max(0, closeButton.frame.minX - 4), height: bounds.height), cursor: .openHand)
+    }
 
     @objc private func closeTapped() { onClose?() }
 }

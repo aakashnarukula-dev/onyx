@@ -45,6 +45,20 @@ public enum GridLayout {
         return out
     }
 
+    /// `items` with the one at `from` taken out and put back at `to`; the ones between shift
+    /// over by one place (dragging a pane onto another's place).
+    public static func moving<T>(_ items: [T], from: Int, to: Int) -> [T] {
+        guard items.indices.contains(from), items.indices.contains(to), from != to else { return items }
+        var out = items
+        out.insert(out.remove(at: from), at: to)
+        return out
+    }
+
+    /// Index of the frame containing `point`, if any.
+    public static func slot(at point: CGPoint, in frames: [CGRect]) -> Int? {
+        frames.firstIndex { $0.contains(point) }
+    }
+
     /// Moves divider `divider` (between item `divider` and `divider + 1`) by `delta` points,
     /// keeping both neighbours at least `min` points of `total`.
     public static func drag(fractions: [CGFloat], divider: Int, by delta: CGFloat,

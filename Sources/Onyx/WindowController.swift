@@ -66,6 +66,7 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
         content.layer?.backgroundColor = Theme.background.cgColor
         window.contentView = content
         content.addSubview(grid)
+        grid.onReorder = { [weak self] order in self?.panes = order }
         content.addSubview(topBar)
 
         addButton.fontSize = 17

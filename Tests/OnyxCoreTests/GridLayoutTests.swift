@@ -52,3 +52,24 @@ struct DividerDragTests {
         #expect(abs(f[0] - 0.2) < 1e-9 && abs(f[1] - 0.8) < 1e-9)
     }
 }
+
+struct PaneMoveTests {
+    @Test func movingLastToFirstShiftsTheOthersOn() {
+        // Three panes: 1 and 2 stacked left, 3 right. Drop 3 on 1's place: 1 moves down, 2 goes right.
+        #expect(GridLayout.moving([1, 2, 3], from: 2, to: 0) == [3, 1, 2])
+    }
+
+    @Test func movingForwardAndInPlace() {
+        #expect(GridLayout.moving([1, 2, 3, 4], from: 0, to: 2) == [2, 3, 1, 4])
+        #expect(GridLayout.moving([1, 2, 3], from: 1, to: 1) == [1, 2, 3])
+        #expect(GridLayout.moving([1, 2, 3], from: 5, to: 0) == [1, 2, 3])
+    }
+
+    @Test func slotUnderPoint() {
+        let f = GridLayout.frames(count: 3, in: CGRect(x: 0, y: 0, width: 1000, height: 600), gap: 1)
+        #expect(GridLayout.slot(at: CGPoint(x: 100, y: 500), in: f) == 0)
+        #expect(GridLayout.slot(at: CGPoint(x: 100, y: 100), in: f) == 1)
+        #expect(GridLayout.slot(at: CGPoint(x: 900, y: 300), in: f) == 2)
+        #expect(GridLayout.slot(at: CGPoint(x: 1200, y: 300), in: f) == nil)
+    }
+}

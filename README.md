@@ -21,8 +21,11 @@ for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in
 
 Layout follows the count: 1 full, 2 side by side, 3 = two stacked left + one right,
 4 = 2×2, 5 = 2+2+1, 6 = 3×2. Drag the gaps to resize; adding or closing re-flows.
+Drag a terminal by its header onto another's place to move it there; the ones in between
+shift along (drop 3 on 1 in the three-pane layout and 1 moves down, 2 moves right).
 New terminals start in `~/Developer` (home if it doesn't exist). Scrollback: 10,000 lines.
-Each header shows the folder while the shell is in front, otherwise the running program.
+Each header shows the folder while the shell is in front, otherwise the running program's
+own title — for Claude, the task it is working on, renamed as the task changes.
 Closing the last window keeps Onyx running, like Terminal; click the Dock icon for a new one.
 
 ## Build

@@ -38,6 +38,10 @@ enum DebugHooks {
             case "V": if let k = Int(step.dropFirst()) { app.pasteInto(pane: k) }
             case "r": app.resizeLast(to: CGSize(width: 900, height: 560))
             case "d": app.dragFirstDivider(by: Double(step.dropFirst()) ?? 100)
+            case "g":  // g<from>.<to>: grab pane <from> by its header and hold it over place <to>
+                let parts = step.dropFirst().split(separator: ".").compactMap { Int($0) }
+                if parts.count == 2 { app.grabPane(parts[0], over: parts[1]) }
+            case "u": app.releasePane()
             default: break
             }
             let delay = step == "s" ? 0.2 : step == "P" ? 10 : 0.8
@@ -154,6 +158,34 @@ extension AppDelegate {
         c.grid.mouseDragged(with: ev(.leftMouseDragged, CGPoint(x: start.x + dx, y: start.y)))
         c.grid.mouseUp(with: ev(.leftMouseUp, CGPoint(x: start.x + dx, y: start.y)))
         c.grid.layoutSubtreeIfNeeded()
+    }
+
+    private static var held: (PaneHeader, NSWindow, CGPoint)?
+
+    /// Presses on pane `from`'s header and drags (without releasing) to the centre of place `to`.
+    func grabPane(_ from: Int, over to: Int) {
+        guard let c = windowControllers.last, let w = c.window, c.panes.indices.contains(from), c.panes.indices.contains(to) else { return }
+        let header = c.panes[from].header
+        let start = header.convert(CGPoint(x: 60, y: 10), to: nil)
+        let f = c.panes[to].frame
+        let end = c.grid.convert(CGPoint(x: f.midX, y: f.midY), to: nil)
+        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w))
+        for k in 1...10 {
+            let t = CGFloat(k) / 10
+            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w))
+        }
+        AppDelegate.held = (header, w, end)
+    }
+
+    func releasePane() {
+        guard let (header, w, p) = AppDelegate.held else { return }
+        AppDelegate.held = nil
+        header.mouseUp(with: mouseEvent(.leftMouseUp, p, w))
+    }
+
+    private func mouseEvent(_ type: NSEvent.EventType, _ p: CGPoint, _ w: NSWindow) -> NSEvent {
+        NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber,
+                           context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
     }
 
     func snapshot(to dir: String, step: Int) {

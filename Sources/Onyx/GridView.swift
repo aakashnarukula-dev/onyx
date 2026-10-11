@@ -1,7 +1,7 @@
 import AppKit
 import OnyxCore
 
-/// Tiles panes per `GridLayout` and lets the 1 pt gaps between them be dragged.
+/// Tiles panes per `GridLayout`, lets the gaps between them be dragged, and lets a pane be moved by its header.
 final class GridView: NSView {
     private(set) var panes: [PaneView] = []
     private var widths: [CGFloat] = []
@@ -18,18 +18,25 @@ final class GridView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = Theme.divider.cgColor
+        layer?.backgroundColor = Theme.background.cgColor
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     private var columns: [Int] { GridLayout.columns(for: panes.count) }
 
+    /// Called with the new pane order after the user drags a pane to another place.
+    var onReorder: (([PaneView]) -> Void)?
+
     func setPanes(_ new: [PaneView]) {
+        cancelMove()  // a pane added or closed mid-drag ends the drag
         let added = new.filter { !panes.contains($0) }
         for p in panes where !new.contains(p) { p.removeFromSuperview() }
         panes = new
-        added.forEach(addSubview)
+        for p in added {
+            addSubview(p)
+            p.onHeaderDrag = { [weak self] pane, phase, event in self?.headerDrag(pane, phase, event) }
+        }
         reflow()
     }
 
@@ -43,9 +50,13 @@ final class GridView: NSView {
         window?.invalidateCursorRects(for: self)
     }
 
+    /// Where the panes go: the view less the margin around them.
+    private var area: CGRect { bounds.insetBy(dx: Theme.margin, dy: Theme.margin) }
+
     override func layout() {
         super.layout()
-        let frames = GridLayout.frames(columns: columns, widths: widths, heights: heights, in: bounds, gap: Theme.gap)
+        guard move == nil else { return }  // a pane drag places the panes itself
+        let frames = GridLayout.frames(columns: columns, widths: widths, heights: heights, in: area, gap: Theme.gap)
         for (pane, f) in zip(panes, frames) { pane.frame = f }
     }
 
@@ -109,11 +120,11 @@ final class GridView: NSView {
         switch drag {
         case .column(let i):
             guard i + 1 < widths.count else { self.drag = nil; return }
-            let usable = bounds.width - Theme.gap * CGFloat(widths.count - 1)
+            let usable = area.width - Theme.gap * CGFloat(widths.count - 1)
             widths = GridLayout.drag(fractions: widths, divider: i, by: p.x - lastPoint.x, total: usable, min: Theme.minPane.width)
         case .row(let c, let i):
             guard c < heights.count, i + 1 < heights[c].count else { self.drag = nil; return }
-            let usable = bounds.height - Theme.gap * CGFloat(heights[c].count - 1)
+            let usable = area.height - Theme.gap * CGFloat(heights[c].count - 1)
             // AppKit y grows upward; row 0 is the top pane, so dragging up shrinks it.
             heights[c] = GridLayout.drag(fractions: heights[c], divider: i, by: lastPoint.y - p.y, total: usable, min: Theme.minPane.height)
         }
@@ -126,6 +137,107 @@ final class GridView: NSView {
         window?.invalidateCursorRects(for: self)
     }
 
+    // MARK: Moving panes
+
+    /// A pane being dragged by its header. It follows the cursor; the others slide into the places
+    /// they would take if it were dropped there, and an outline marks where it will land.
+    private struct Move {
+        let pane: PaneView
+        let from: Int
+        var to: Int
+        let slots: [CGRect]
+        let grab: CGPoint  // cursor offset inside the dragged pane
+        let placeholder: NSView
+    }
+
+    private var move: Move?
+
+    private func headerDrag(_ pane: PaneView, _ phase: PaneHeader.DragPhase, _ event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        switch phase {
+        case .began: beginMove(pane, at: p)
+        case .moved: updateMove(to: p)
+        case .ended: endMove()
+        }
+    }
+
+    private func beginMove(_ pane: PaneView, at p: CGPoint) {
+        guard move == nil, panes.count > 1, let from = panes.firstIndex(of: pane) else { return }
+        let placeholder = PassThroughView(frame: pane.frame)
+        placeholder.wantsLayer = true
+        placeholder.layer?.cornerRadius = Theme.cornerRadius
+        placeholder.layer?.borderWidth = 1.5
+        placeholder.layer?.borderColor = Theme.accent.withAlphaComponent(0.6).cgColor
+        placeholder.layer?.backgroundColor = Theme.accent.withAlphaComponent(0.05).cgColor
+        addSubview(placeholder, positioned: .below, relativeTo: nil)
+        addSubview(pane, positioned: .above, relativeTo: nil)  // ride above the others
+        pane.layer?.shadowColor = NSColor.black.cgColor
+        pane.layer?.shadowOpacity = 0.7
+        pane.layer?.shadowRadius = 16
+        pane.alphaValue = 0.94
+        move = Move(pane: pane, from: from, to: from, slots: panes.map(\.frame),
+                    grab: CGPoint(x: p.x - pane.frame.minX, y: p.y - pane.frame.minY), placeholder: placeholder)
+        NSCursor.closedHand.push()
+    }
+
+    private func updateMove(to p: CGPoint) {
+        guard var m = move else { return }
+        // Moving (not resizing) the dragged terminal: nothing is redrawn, the program sees no resize.
+        m.pane.setFrameOrigin(CGPoint(x: p.x - m.grab.x, y: p.y - m.grab.y))
+        guard let to = GridLayout.slot(at: p, in: m.slots), to != m.to else { return }
+        m.to = to
+        move = m
+        let order = GridLayout.moving(panes, from: m.from, to: to)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.22
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            ctx.allowsImplicitAnimation = true
+            for (i, pane) in order.enumerated() {
+                let slot = m.slots[i]
+                if pane === m.pane { m.placeholder.animator().frame = slot; continue }
+                // Take the new size at once (one resize for the program), then glide into place.
+                if pane.frame.size != slot.size { pane.setFrameSize(slot.size) }
+                pane.animator().setFrameOrigin(slot.origin)
+            }
+        }
+    }
+
+    private func endMove() {
+        guard let m = move else { return }
+        let order = GridLayout.moving(panes, from: m.from, to: m.to)
+        let slot = m.slots[m.to]
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.16
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            if m.pane.frame.size != slot.size { m.pane.setFrameSize(slot.size) }
+            m.pane.animator().setFrameOrigin(slot.origin)
+            m.pane.animator().alphaValue = 1
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.move?.pane === m.pane else { return }
+                self.cancelMove()
+                // Same count, so the divider sizes stay with their places; panes take the size of their new place.
+                self.panes = order
+                self.needsLayout = true
+                self.layoutSubtreeIfNeeded()
+                self.window?.invalidateCursorRects(for: self)
+                self.onReorder?(order)
+                m.pane.focus()
+            }
+        })
+    }
+
+    /// Ends a drag: the dragged pane's lift goes away and the grid lays out its current order.
+    private func cancelMove() {
+        guard let m = move else { return }
+        move = nil
+        m.placeholder.removeFromSuperview()
+        m.pane.layer?.shadowOpacity = 0
+        m.pane.alphaValue = 1
+        NSCursor.pop()
+        needsLayout = true
+    }
+
     /// The pane next to `pane` in a direction, by nearest frame centre.
     func neighbour(of pane: PaneView, dx: CGFloat, dy: CGFloat) -> PaneView? {
         let c = CGPoint(x: pane.frame.midX, y: pane.frame.midY)
@@ -136,4 +248,9 @@ final class GridView: NSView {
             hypot(a.frame.midX - c.x, a.frame.midY - c.y) < hypot(b.frame.midX - c.x, b.frame.midY - c.y)
         }
     }
+}
+
+/// Shows content but never takes the mouse.
+private final class PassThroughView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

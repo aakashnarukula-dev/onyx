@@ -15,7 +15,10 @@ import SwiftTerm
     static let danger = hex(0xa04040)
     static let headerHeight: CGFloat = 24
     static let topBarHeight: CGFloat = 30
-    static let gap: CGFloat = 1
+    static let gap: CGFloat = 5         // between terminals
+    static let margin: CGFloat = 5      // around the grid
+    static let cornerRadius: CGFloat = 10
+    static let padding: CGFloat = 6     // terminal text inset from a pane's sides and bottom
     static let minPane = CGSize(width: 200, height: 120)
 
     static func font(size: CGFloat) -> NSFont { .monospacedSystemFont(ofSize: size, weight: .regular) }
