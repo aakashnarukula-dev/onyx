@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         NSApp.mainMenu = MainMenu.build()
         settings = Settings.load(paths)
         zshDir = (try? ZshIntegration.write(to: paths.home.appendingPathComponent("zsh")).path) ?? ""
-        if let saved = usesRealHome ? SessionState.load(paths) : nil, !saved.windows.isEmpty {
+        if let saved = usesRealHome ? SessionState.load(paths) : nil, askToReopen(saved) {
             saved.windows.forEach(reopen)
         } else {
             newWindow(nil)
@@ -98,12 +98,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     // MARK: Reopening what was open
 
-    private let claude = ClaudeSessions()
+    private var claude: ClaudeSessions { PaneView.claude }
     private var sessionTimer: Timer?
     private var terminating = false
     /// Test runs (`ONYX_SNAPSHOT`) leave the real session and settings alone unless given their own ONYX_HOME.
     private var usesRealHome: Bool {
         DebugHooks.env["ONYX_SNAPSHOT"] == nil || DebugHooks.env["ONYX_HOME"] != nil
+    }
+
+    /// Asks whether to bring back last time's terminals, when they held Claude conversations
+    /// (empty terminals aren't worth asking about). Test runs reopen without asking.
+    private func askToReopen(_ saved: SessionState) -> Bool {
+        let n = saved.conversations(where: claude.hasTranscript).count
+        guard n > 0 else { return false }
+        if DebugHooks.env["ONYX_SNAPSHOT"] != nil { return true }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Reopen your last terminals?"
+        alert.informativeText = (n == 1 ? "1 Claude conversation" : "\(n) Claude conversations")
+            + " from last time. Reopen brings back the windows and terminals, each Claude where it left off."
+            + " Start Fresh opens one new terminal; `claude --resume` still finds them later."
+        alert.addButton(withTitle: "Reopen")
+        alert.addButton(withTitle: "Start Fresh")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Opens a saved window: same place (if still on a screen), same terminals in the same order.

@@ -207,13 +207,13 @@ func confirmClose(busy: Int, quitting: Bool = false) -> Bool {
     let alert = NSAlert()
     if quitting {
         alert.messageText = "Quit Onyx?"
-        alert.informativeText = (busy == 1 ? "1 terminal is busy." : "\(busy) terminals are busy.")
-            + " Claude conversations reopen next time you open Onyx; anything else running ends."
+        alert.informativeText = (busy == 1 ? "Something is still working in 1 terminal." : "Something is still working in \(busy) terminals.")
+            + " Quitting stops it. Claude conversations can be reopened next time you open Onyx."
     } else {
         alert.messageText = busy == 1 ? "Close this terminal?" : "Close \(busy) busy terminals?"
         alert.informativeText = busy == 1
-            ? "Something is still running in it (likely Claude). Closing ends it."
-            : "Something is still running in them (likely Claude). Closing ends it."
+            ? "Something is still working in it (Claude answering, or another program). Closing stops it."
+            : "Something is still working in them (Claude answering, or another program). Closing stops it."
     }
     alert.addButton(withTitle: quitting ? "Quit" : "Close")
     alert.addButton(withTitle: "Cancel")

@@ -33,11 +33,11 @@ struct SessionStateTests {
 
 struct ClaudeSessionsTests {
     /// A fake ~/.claude with one running session record and one transcript.
-    func fakeClaudeDir(pid: Int32, id: String, cwd: String, transcript: Bool) throws -> URL {
+    func fakeClaudeDir(pid: Int32, id: String, cwd: String, transcript: Bool, status: String = "idle") throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("claude-\(UUID().uuidString)")
         let sessions = dir.appendingPathComponent("sessions")
         try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
-        let record = #"{"pid": \#(pid), "sessionId": "\#(id)", "cwd": "\#(cwd)", "kind": "interactive"}"#
+        let record = #"{"pid": \#(pid), "sessionId": "\#(id)", "cwd": "\#(cwd)", "kind": "interactive", "status": "\#(status)"}"#
         try Data(record.utf8).write(to: sessions.appendingPathComponent("\(pid).json"))
         if transcript {
             let project = dir.appendingPathComponent("projects/-Users-me-Developer")
@@ -52,8 +52,24 @@ struct ClaudeSessionsTests {
     @Test func readsTheSessionOfARunningClaude() throws {
         let dir = try fakeClaudeDir(pid: 4242, id: id, cwd: "/Users/me/Developer", transcript: true)
         let s = ClaudeSessions(configDir: dir).running(pid: 4242)
-        #expect(s == .init(id: id, cwd: "/Users/me/Developer"))
+        #expect(s == .init(id: id, cwd: "/Users/me/Developer", working: false))
         #expect(ClaudeSessions(configDir: dir).running(pid: 4243) == nil)
+    }
+
+    @Test func claudeIsWorkingWhileBusyOrWaitingForAnAnswer() throws {
+        for (status, working) in [("busy", true), ("waiting", true), ("idle", false)] {
+            let dir = try fakeClaudeDir(pid: 9, id: id, cwd: "/tmp", transcript: false, status: status)
+            #expect(ClaudeSessions(configDir: dir).running(pid: 9)?.working == working)
+        }
+    }
+
+    @Test func savedStateKnowsWhetherAnythingIsWorthReopening() {
+        let empty = SessionState(windows: [.init(frame: [0, 0, 1, 1], panes: [.init(cwd: "/tmp", claudeSession: nil)])])
+        #expect(empty.conversations(where: { _ in true }).isEmpty)
+        let one = SessionState(windows: [.init(frame: [0, 0, 1, 1], panes: [
+            .init(cwd: "/tmp", claudeSession: id), .init(cwd: "/tmp", claudeSession: "0badc0de-0000-0000-0000-000000000000"),
+        ])])
+        #expect(one.conversations(where: { $0 == id }) == [id])
     }
 
     @Test func rejectsARecordForAnotherPidOrAnOddId() throws {

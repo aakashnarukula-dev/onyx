@@ -163,10 +163,15 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     /// The saved conversation this pane was reopened to resume, until Claude is seen running.
     var resuming: SessionState.Pane?
 
-    /// True while something other than the bare shell runs in the pane (Claude, a build, …).
+    /// Claude's own records of its sessions, shared by every pane.
+    static let claude = ClaudeSessions()
+
+    /// True while something in the pane would be cut off by closing it: a program other than the
+    /// shell, or a Claude that is answering or waiting for you. An idle Claude doesn't count: its
+    /// conversation is saved and can be reopened.
     var isBusy: Bool {
         guard !closed, terminal.process.running else { return false }
-        return !childPids(of: terminal.process.shellPid).isEmpty
+        return childPids(of: terminal.process.shellPid).contains { PaneView.claude.running(pid: $0)?.working ?? true }
     }
 
     /// Starts ending the shell and everything under it and returns what must be reaped.

@@ -13,7 +13,7 @@ for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in
 |---|---|
 | `⌘N` / `+` | New terminal (the 7th opens a new window) |
 | `⌘⇧N` | New window |
-| `⌘W` | Close terminal (asks first if something is still running) |
+| `⌘W` | Close terminal (asks first if Claude is answering or another program runs) |
 | `⌘K` | Clear |
 | `⌘C` / `⌘V` | Copy / paste |
 | `⌘`-click | Open a link |
@@ -35,12 +35,13 @@ own title — for Claude, the task it is working on, renamed as the task changes
 Closing the last window keeps Onyx running, like Terminal; click the Dock icon for a new one.
 
 **Reopening.** Onyx keeps a record of what is open (`~/Library/Application Support/Onyx/session.json`,
-updated every 2 s), so after quitting — or a force quit or crash — the next launch brings back
-the same windows, terminals and order, each Claude back in its conversation
+updated every 2 s), so after quitting — or a force quit or crash — the next launch asks
+"Reopen your last terminals?" and can bring back the same windows, terminals and order, each
+Claude back in its conversation
 (`claude --resume <id> --permission-mode auto`, in the folder Claude ran in). Which conversation
 a terminal holds is read from Claude's own `~/.claude/sessions/<pid>.json`, so a Claude you
 started yourself, or one after `/clear`, is followed too. A conversation with no messages yet
-starts fresh; programs other than Claude (dev servers, ssh) don't come back; a window you
+starts fresh, and if none had messages Onyx doesn't ask and just opens one terminal; programs other than Claude (dev servers, ssh) don't come back; a window you
 close on purpose doesn't come back.
 
 ## Build

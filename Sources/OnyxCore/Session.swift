@@ -28,6 +28,11 @@ public struct SessionState: Codable, Equatable, Sendable {
 
     public init(windows: [Window]) { self.windows = windows }
 
+    /// The saved conversation ids that pass `canResume` (e.g. have a transcript), in order.
+    public func conversations(where canResume: (String) -> Bool) -> [String] {
+        windows.flatMap(\.panes).compactMap(\.claudeSession).filter(canResume)
+    }
+
     public static func load(_ paths: OnyxPaths) -> SessionState? {
         guard let data = try? Data(contentsOf: paths.session) else { return nil }
         return try? JSONDecoder().decode(SessionState.self, from: data)
@@ -52,6 +57,8 @@ public struct ClaudeSessions: Sendable {
     public struct Running: Equatable, Sendable {
         public let id: String
         public let cwd: String
+        /// Answering, or waiting for the user (a permission prompt); false when idle at its prompt.
+        public let working: Bool
     }
 
     public let configDir: URL
@@ -75,7 +82,7 @@ public struct ClaudeSessions: Sendable {
               (obj["pid"] as? NSNumber)?.int32Value == pid,
               let id = obj["sessionId"] as? String, Self.isSessionId(id),
               let cwd = obj["cwd"] as? String else { return nil }
-        return Running(id: id, cwd: cwd)
+        return Running(id: id, cwd: cwd, working: (obj["status"] as? String).map { $0 != "idle" } ?? true)
     }
 
     /// Claude writes a conversation to `projects/<folder>/<id>.jsonl` once it has a message;
