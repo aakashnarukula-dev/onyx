@@ -58,3 +58,12 @@ struct SessionEnvSplitTests {
         #expect(env["ONYX_PANE_ID"] == "p")
     }
 }
+
+struct SessionEnvScrubTests {
+    @Test func dropsInheritedClaudeSessionMarkers() {
+        let env = SessionEnv.build(base: ["CLAUDECODE": "1", "CLAUDE_CODE_CHILD_SESSION": "x", "CLAUDE_CODE_ENTRYPOINT": "cli", "KEEP": "1"],
+                                   accountVars: [:], paneId: "p", binDir: "/b")
+        #expect(env["CLAUDECODE"] == nil && env["CLAUDE_CODE_CHILD_SESSION"] == nil && env["CLAUDE_CODE_ENTRYPOINT"] == nil)
+        #expect(env["KEEP"] == "1")
+    }
+}

@@ -34,3 +34,21 @@ struct GridLayoutTests {
         #expect(f[4] == CGRect(x: 600, y: 0, width: 300, height: 600))
     }
 }
+
+struct DividerDragTests {
+    @Test func dragMovesSpaceBetweenNeighbours() {
+        let f = GridLayout.drag(fractions: [0.5, 0.5], divider: 0, by: 100, total: 1000, min: 200)
+        #expect(abs(f[0] - 0.6) < 1e-9 && abs(f[1] - 0.4) < 1e-9)
+    }
+
+    @Test func dragClampsToMinimum() {
+        let f = GridLayout.drag(fractions: [0.5, 0.25, 0.25], divider: 1, by: 500, total: 1000, min: 200)
+        #expect(abs(f[1] - 0.3) < 1e-9 && abs(f[2] - 0.2) < 1e-9)
+        #expect(abs(f[0] - 0.5) < 1e-9)
+    }
+
+    @Test func dragLeftClampsToo() {
+        let f = GridLayout.drag(fractions: [0.5, 0.5], divider: 0, by: -450, total: 1000, min: 200)
+        #expect(abs(f[0] - 0.2) < 1e-9 && abs(f[1] - 0.8) < 1e-9)
+    }
+}

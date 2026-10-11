@@ -15,6 +15,9 @@ public enum SessionEnv {
                              paneId: String, binDir: String) -> [String: String] {
         var env = base
         for k in accountKeys { env[k] = nil }
+        // Markers from a Claude session that launched Onyx would make each pane's Claude
+        // think it is a child session. The login shell re-reads the user's own settings.
+        for k in env.keys where k == "CLAUDECODE" || k.hasPrefix("CLAUDE_CODE_") { env[k] = nil }
         env["ONYX_PANE_ID"] = paneId
         env["TERM"] = "xterm-256color"
         env["COLORTERM"] = "truecolor"

@@ -44,4 +44,18 @@ public enum GridLayout {
         }
         return out
     }
+
+    /// Moves divider `divider` (between item `divider` and `divider + 1`) by `delta` points,
+    /// keeping both neighbours at least `min` points of `total`.
+    public static func drag(fractions: [CGFloat], divider: Int, by delta: CGFloat,
+                            total: CGFloat, min minSize: CGFloat) -> [CGFloat] {
+        guard divider >= 0, divider + 1 < fractions.count, total > 0 else { return fractions }
+        var f = fractions
+        let a = f[divider] * total, b = f[divider + 1] * total
+        let lo = Swift.min(0, minSize - a), hi = Swift.max(0, b - minSize)
+        let d = Swift.min(Swift.max(delta, lo), hi)
+        f[divider] = (a + d) / total
+        f[divider + 1] = (b - d) / total
+        return f
+    }
 }
