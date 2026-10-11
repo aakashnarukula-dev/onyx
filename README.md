@@ -5,6 +5,8 @@ terminal is exactly what Terminal.app gives you — your login shell started the
 environment, your `gh`/git/vercel logins — except that `claude --permission-mode auto` is typed
 for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in your shell.
 
+![Four Claude terminals in one Onyx window, each header named after its task](docs/screenshots/four-terminals.png)
+
 ## Use
 
 | Key | Action |
@@ -23,6 +25,9 @@ Layout follows the count: 1 full, 2 side by side, 3 = two stacked left + one rig
 4 = 2×2, 5 = 2+2+1, 6 = 3×2. Drag the gaps to resize; adding or closing re-flows.
 Drag a terminal by its header onto another's place to move it there; the ones in between
 shift along (drop 3 on 1 in the three-pane layout and 1 moves down, 2 moves right).
+
+![Three terminals: two stacked on the left, one on the right](docs/screenshots/three-terminals.png)
+
 New terminals start in `~/Developer` (home if it doesn't exist). Scrollback: 10,000 lines.
 The selected terminal has an orange border. There is no scroll bar; scroll with the trackpad.
 Each header shows the folder while the shell is in front, otherwise the running program's

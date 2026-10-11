@@ -202,7 +202,34 @@ extension AppDelegate {
                 let t = p.getTerminalSize()
                 report(dir, "  pane \(i) focused=\(c.focused === p) title=[\(p.headerTitle)] running=\(p.terminal.process.running) busy=\(p.isBusy) size=\(t.cols)x\(t.rows) lines=\(t.lines): \(p.visibleText().suffix(Int(DebugHooks.env["ONYX_LINES"] ?? "2") ?? 2))")
             }
-            try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(dir)/\(step)-\(w).png"))
+            // The terminal leaves its default background transparent (the layer shows black
+            // behind it on screen), so lay the picture over black as the window looks.
+            guard let image = rep.cgImage, let ctx = CGContext(data: nil, width: image.width, height: image.height,
+                                                               bitsPerComponent: 8, bytesPerRow: 0,
+                                                               space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+            let all = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+            ctx.setFillColor(Theme.background.cgColor)
+            ctx.fill(all)
+            ctx.draw(image, in: all)
+            // Drawn as part of the window the terminal text comes out flipped, so paint each
+            // terminal from its own capture on top.
+            let scale = CGFloat(image.width) / view.bounds.width
+            for p in c.panes {
+                let t = p.terminal
+                guard let tr = t.bitmapImageRepForCachingDisplay(in: t.bounds) else { continue }
+                t.cacheDisplay(in: t.bounds, to: tr)
+                guard let timg = tr.cgImage else { continue }
+                let f = t.convert(t.bounds, to: view)  // content view is not flipped: origin bottom-left
+                let r = CGRect(x: f.minX * scale, y: f.minY * scale, width: f.width * scale, height: f.height * scale)
+                ctx.setFillColor(Theme.background.cgColor)
+                ctx.fill(r)
+                ctx.draw(timg, in: r)
+            }
+            if let out = ctx.makeImage() {
+                try? NSBitmapImageRep(cgImage: out).representation(using: .png, properties: [:])?
+                    .write(to: URL(fileURLWithPath: "\(dir)/\(step)-\(w).png"))
+            }
         }
     }
 }
