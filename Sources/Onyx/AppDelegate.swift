@@ -17,16 +17,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
         settings = Settings.load(paths)
-        if settings.activeGitHub == nil, let login = accounts.githubActiveLogin() {
-            settings.activeGitHub = login
-            try? settings.save(paths)
-        }
         promptPath = (try? PanePrompt.write(to: paths.home).path) ?? paths.prompt.path
-        accountVars = SessionEnv.accountVars(settings: settings, accounts: accounts)
-        cacheIdentity()
         newWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
-        log("first pane")
+        log("window")
+        // Account env needs `gh` (and maybe the GitHub API): build it off the launch path;
+        // panes created meanwhile start their shell once it is ready.
+        let settings = self.settings, accounts = self.accounts
+        DispatchQueue.global(qos: .userInitiated).async {
+            var s = settings
+            let defaultLogin = s.activeGitHub == nil ? accounts.githubActiveLogin() : nil
+            if let defaultLogin { s.activeGitHub = defaultLogin }
+            let vars = SessionEnv.accountVars(settings: s, accounts: accounts)
+            DispatchQueue.main.async {
+                if let defaultLogin, self.settings.activeGitHub == nil {
+                    self.settings.activeGitHub = defaultLogin
+                    try? self.settings.save(self.paths)
+                }
+                self.accountsReady(vars)
+                self.log("first pane started")
+            }
+        }
         DebugHooks.runScriptIfAny(self)
     }
 
@@ -80,16 +91,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     }
 
     private var pendingCommand: String?
+    /// nil until the launch-time account lookup finishes; panes made before then wait here.
+    private var waiting: [(PaneView, String)]? = []
 
     private func makePane(command defaultCommand: String) -> PaneView {
         let command = pendingCommand ?? defaultCommand
         pendingCommand = nil
-        let paneId = UUID().uuidString.lowercased()
-        let env = SessionEnv.build(base: ProcessInfo.processInfo.environment, accountVars: accountVars,
-                                   paneId: paneId, binDir: binDir)
         let cwd = FileManager.default.fileExists(atPath: developerDir) ? developerDir : NSHomeDirectory()
-        return PaneView(id: paneId, command: command, env: env, cwd: cwd, fontSize: CGFloat(settings.fontSize),
-                        accountLabel: accountVars["GH_TOKEN"] != nil ? settings.activeGitHub : nil, registry: registry)
+        let pane = PaneView(id: UUID().uuidString.lowercased(), cwd: cwd, fontSize: CGFloat(settings.fontSize), registry: registry)
+        if waiting != nil {
+            waiting?.append((pane, command))
+        } else {
+            start(pane, command)
+        }
+        return pane
+    }
+
+    private func start(_ pane: PaneView, _ command: String) {
+        let env = SessionEnv.build(base: ProcessInfo.processInfo.environment, accountVars: accountVars,
+                                   paneId: pane.id, binDir: binDir)
+        pane.start(command: command, env: env, accountLabel: accountVars["GH_TOKEN"] != nil ? settings.activeGitHub : nil)
+    }
+
+    private func accountsReady(_ vars: [String: String]) {
+        accountVars = vars
+        cacheIdentity()
+        let queued = waiting ?? []
+        waiting = nil
+        queued.forEach { start($0.0, $0.1) }
+        NotificationCenter.default.post(name: .onyxAccountsChanged, object: nil)
     }
 
     func windowControllerDidClose(_ controller: WindowController) {

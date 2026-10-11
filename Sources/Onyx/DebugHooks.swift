@@ -3,7 +3,7 @@ import AppKit
 /// Test hooks, inert unless their env vars are set:
 /// - `ONYX_PANE_COMMAND`: run this instead of Claude in every pane.
 /// - `ONYX_SNAPSHOT=<dir>` + `ONYX_SCRIPT="n n n w2 s"`: after launch run the steps
-///   (`n` new pane, `w<i>` close pane i of the last window, `s` snapshot every window to
+///   (`n` new pane, `p`/`P` wait 0.8 s/10 s, `t<i>` type $ONYX_TYPE_<i> into pane i, `w<i>` close pane i of the last window, `s` snapshot every window to
 ///   `<dir>/<step>-<window>.png`), then quit.
 @MainActor
 enum DebugHooks {
@@ -24,11 +24,13 @@ enum DebugHooks {
             case "w": if let k = Int(step.dropFirst()) { app.closePane(at: k) }
             case "s": app.snapshot(to: dir, step: i)
             case "a": app.showSettings(nil)
+            case "t": if let k = Int(step.dropFirst()), let text = env["ONYX_TYPE_\(k)"] { app.type(text, intoPane: k) }
             case "g": app.setActiveGitHub(String(step.dropFirst()))
             case "d": app.dragFirstDivider(by: Double(step.dropFirst()) ?? 100)
             default: break
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + (step == "s" ? 0.2 : 0.8), execute: next)
+            let delay = step == "s" ? 0.2 : step == "P" ? 10 : 0.8
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: next)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: next)
     }
@@ -38,6 +40,14 @@ extension AppDelegate {
     func closePane(at index: Int) {
         guard let c = windowControllers.last, c.panes.indices.contains(index) else { return }
         c.close(c.panes[index])
+    }
+
+    /// Types `text` into pane `index` of the last window, then presses Return.
+    func type(_ text: String, intoPane index: Int) {
+        guard let c = windowControllers.last, c.panes.indices.contains(index) else { return }
+        let t = c.panes[index].terminal
+        t.send(txt: text)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { t.send(txt: "\r") }
     }
 
     /// Drags the divider right of the first pane horizontally by `dx` points.

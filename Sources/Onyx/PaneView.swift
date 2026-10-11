@@ -17,9 +17,11 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
 
     var isFocused = false { didSet { updateFocusLook() } }
 
-    /// `command` runs inside an interactive login zsh; the pane falls back to a plain shell after it.
-    init(id: String, command: String, env: [String: String], cwd: String, fontSize: CGFloat,
-         accountLabel: String?, registry: PaneRegistry) {
+    private let cwd: String
+
+    /// Builds the view; the shell starts on `start(command:env:)`.
+    init(id: String, cwd: String, fontSize: CGFloat, registry: PaneRegistry) {
+        self.cwd = cwd
         self.id = id
         self.registry = registry
         terminal = LocalProcessTerminalView(frame: .zero)
@@ -39,13 +41,17 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         terminal.subviews.filter { $0 is NSScroller }.forEach { $0.isHidden = true }
 
         header.title = (cwd as NSString).abbreviatingWithTildeInPath
-        header.account = accountLabel
         header.onClose = { [weak self] in self?.requestClose() }
         header.onClick = { [weak self] in self?.focus() }
         addSubview(header)
         addSubview(terminal)
         updateFocusLook()
+    }
 
+    /// Runs `command` inside an interactive login zsh; the pane falls back to a plain shell after it.
+    func start(command: String, env: [String: String], accountLabel: String?) {
+        guard !closed, !terminal.process.running else { return }
+        header.account = accountLabel
         let shellCmd = "\(command); exec /bin/zsh -l -i"
         terminal.startProcess(executable: "/bin/zsh", args: ["-l", "-i", "-c", shellCmd],
                               environment: env.map { "\($0.key)=\($0.value)" },
