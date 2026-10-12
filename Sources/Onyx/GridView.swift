@@ -162,9 +162,22 @@ final class GridView: NSView {
         switch phase {
         case .began: beginMove(pane, at: p)
         case .moved: updateMove(to: p)
-        case .ended: endMove()
+        case .ended:
+            // Let go outside the window: the pane leaves for a window of its own (or another Onyx window).
+            if let w = window, let m = move, !m.dropping {
+                let screen = w.convertPoint(toScreen: event.locationInWindow)
+                if !w.frame.contains(screen) {
+                    cancelMove()
+                    onTearOff?(m.pane, screen)
+                    return
+                }
+            }
+            endMove()
         }
     }
+
+    /// Called when a pane is dragged out of the window and let go, with the screen point.
+    var onTearOff: ((PaneView, NSPoint) -> Void)?
 
     private func beginMove(_ pane: PaneView, at p: CGPoint) {
         guard move == nil, panes.count > 1, let from = panes.firstIndex(of: pane) else { return }
@@ -191,6 +204,7 @@ final class GridView: NSView {
         guard var m = move else { return }
         // Moving (not resizing) the dragged terminal: nothing is redrawn, the program sees no resize.
         m.pane.setFrameOrigin(CGPoint(x: p.x - m.grab.x, y: p.y - m.grab.y))
+        m.pane.alphaValue = bounds.contains(p) ? 0.94 : 0.6  // fainter: letting go here tears it off
         guard let to = GridLayout.slot(at: p, in: m.slots), to != m.to else { return }
         m.to = to
         move = m

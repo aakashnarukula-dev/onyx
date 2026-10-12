@@ -31,6 +31,7 @@ final class TopBar: NSView {
 @MainActor protocol WindowControllerDelegate: AnyObject {
     func makePane(for controller: WindowController, restoring: SessionState.Pane?) -> PaneView
     func windowControllerDidClose(_ controller: WindowController)
+    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint)
 }
 
 /// One Onyx window holding up to `GridLayout.maxPanes` independent terminals.
@@ -67,6 +68,10 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
         window.contentView = content
         content.addSubview(grid)
         grid.onReorder = { [weak self] order in self?.panes = order }
+        grid.onTearOff = { [weak self] pane, point in
+            guard let self else { return }
+            self.host?.movePane(pane, from: self, toScreenPoint: point)
+        }
         content.addSubview(topBar)
 
         addButton.fontSize = 17
@@ -136,6 +141,32 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
         grid.setPanes(panes)
         updateCount()
         if focused === pane || focused == nil { panes[min(i, panes.count - 1)].focus() }
+    }
+
+    /// Takes a pane out without stopping it: it is moving to another window.
+    func detach(_ pane: PaneView) {
+        guard let i = panes.firstIndex(of: pane) else { return }
+        panes.remove(at: i)
+        if focused === pane { focused = nil }
+        pane.isFocused = false
+        grid.setPanes(panes)
+        updateCount()
+        if panes.isEmpty {
+            window?.close()
+        } else {
+            panes[min(i, panes.count - 1)].focus()
+        }
+    }
+
+    /// Takes in a running pane from another window.
+    func adopt(_ pane: PaneView) {
+        guard canAddPane else { return }
+        pane.delegate = self
+        panes.append(pane)
+        grid.setPanes(panes)
+        updateCount()
+        grid.layoutSubtreeIfNeeded()
+        pane.focus()
     }
 
     func focusPane(at index: Int) {

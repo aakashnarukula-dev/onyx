@@ -175,6 +175,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         saveSession()  // a window closed on purpose doesn't come back
     }
 
+    /// A pane dragged out of `source` and let go at `point` (screen): into the Onyx window under
+    /// the point if it has room, else into a new window placed where it was let go.
+    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint) {
+        let target = controllers.first { $0 !== source && $0.canAddPane && ($0.window?.frame.contains(point) ?? false) }
+        let size = CGSize(width: max(pane.frame.width + Theme.margin * 2, 640),
+                          height: max(pane.frame.height + Theme.topBarHeight + Theme.margin * 2, 400))
+        source.detach(pane)
+        if let target {
+            target.adopt(pane)
+            target.window?.makeKeyAndOrderFront(nil)
+            return
+        }
+        // The new window's top bar sits under the cursor, kept on the screen it was let go on.
+        var frame = NSRect(x: point.x - size.width / 2, y: point.y - size.height + Theme.topBarHeight / 2,
+                           width: size.width, height: size.height)
+        if let screen = (NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main)?.visibleFrame {
+            frame.origin.x = min(max(frame.minX, screen.minX), screen.maxX - frame.width)
+            frame.origin.y = min(max(frame.minY, screen.minY), screen.maxY - frame.height)
+        }
+        let c = WindowController(owner: self, frame: frame)
+        controllers.append(c)
+        c.showWindow(nil)
+        c.adopt(pane)
+    }
+
     private var developerDir: String { NSHomeDirectory() + "/Developer" }
 
     // MARK: Menu actions

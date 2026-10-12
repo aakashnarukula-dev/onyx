@@ -42,6 +42,10 @@ enum DebugHooks {
                 let parts = step.dropFirst().split(separator: ".").compactMap { Int($0) }
                 if parts.count == 2 { app.grabPane(parts[0], over: parts[1]) }
             case "u": app.releasePane()
+            case "O":  // O<pane>: drag pane <pane> of the last window out to the left of it and let go
+                if let k = Int(step.dropFirst()) { app.dragPaneOut(k, intoFirstWindow: false) }
+            case "J":  // J<pane>: drag pane <pane> of the last window onto the first window and let go
+                if let k = Int(step.dropFirst()) { app.dragPaneOut(k, intoFirstWindow: true) }
             case "Q":  // release, and at once grab pane 1 over place 0 (a grab during the drop animation)
                 app.releasePane()
                 app.grabPane(1, over: 0)
@@ -192,6 +196,22 @@ extension AppDelegate {
             header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w))
         }
         AppDelegate.held = (header, w, end)
+    }
+
+    func dragPaneOut(_ index: Int, intoFirstWindow: Bool) {
+        guard let c = windowControllers.last, let w = c.window, c.panes.indices.contains(index) else { return }
+        let header = c.panes[index].header
+        let start = header.convert(CGPoint(x: 60, y: 10), to: nil)
+        var end = CGPoint(x: -250, y: start.y)  // window coordinates, left of the window
+        if intoFirstWindow, let first = windowControllers.first?.window {
+            end = w.convertPoint(fromScreen: CGPoint(x: first.frame.midX, y: first.frame.midY))
+        }
+        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w))
+        for k in 1...10 {
+            let t = CGFloat(k) / 10
+            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w))
+        }
+        header.mouseUp(with: mouseEvent(.leftMouseUp, end, w))
     }
 
     func releasePane() {
