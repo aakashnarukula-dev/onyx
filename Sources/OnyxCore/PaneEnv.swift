@@ -113,3 +113,15 @@ public enum TerminalClear {
     /// Sent to the program: Ctrl-L, which zsh and Claude both answer by redrawing.
     public static let redrawKey: [UInt8] = [0x0c]
 }
+
+/// Files dropped on a terminal, typed as Terminal.app types them: each path with shell
+/// characters backslash-escaped, separated by spaces, plus a trailing space.
+public enum DroppedFiles {
+    static let special = Set(#" \'"$`!&*()[]{};<>?|#~"#.map { $0 }).union(["\t"])
+
+    public static func text(for paths: [String]) -> String {
+        paths.map { path in
+            path.map { special.contains($0) ? "\\\($0)" : String($0) }.joined()
+        }.joined(separator: " ") + " "
+    }
+}

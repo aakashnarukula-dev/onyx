@@ -8,3 +8,22 @@ struct ClearTests {
         #expect(TerminalClear.redrawKey == [0x0c])
     }
 }
+
+struct DropTests {
+    @Test func pathsAreEscapedLikeTerminalApp() {
+        #expect(DroppedFiles.text(for: ["/Users/me/Desktop/Screen Recording 2026-10-12 at 12.36.21 AM.mov"])
+                == #"/Users/me/Desktop/Screen\ Recording\ 2026-10-12\ at\ 12.36.21\ AM.mov "#)
+    }
+
+    @Test func shellSpecialCharactersAreEscaped() {
+        #expect(DroppedFiles.text(for: [#"/tmp/a'b"c$d&e(f).png"#]) == #"/tmp/a\'b\"c\$d\&e\(f\).png "#)
+    }
+
+    @Test func severalFilesAreSpaceSeparated() {
+        #expect(DroppedFiles.text(for: ["/a/x.png", "/b/y z.pdf"]) == #"/a/x.png /b/y\ z.pdf "#)
+    }
+
+    @Test func plainPathsAndUnicodeStayAsTheyAre() {
+        #expect(DroppedFiles.text(for: ["/Users/me/हिन्दी/photo_1-2.jpg"]) == "/Users/me/हिन्दी/photo_1-2.jpg ")
+    }
+}

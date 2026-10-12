@@ -17,6 +17,7 @@ for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in
 | `⌘K` | Clear |
 | `⌘C` / `⌘V` | Copy / paste |
 | `⌘`-click | Open a link |
+| Drop files | Types their paths, escaped like Terminal (Claude attaches dropped images) |
 | `⌘1`…`⌘6` | Focus terminal |
 | `⌘⌥←↑↓→` | Move focus |
 | `⌘+` / `⌘-` / `⌘0` | Font bigger / smaller / default (11 pt) |

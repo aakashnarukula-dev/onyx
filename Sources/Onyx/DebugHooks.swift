@@ -46,6 +46,18 @@ enum DebugHooks {
                 app.releasePane()
                 app.grabPane(1, over: 0)
             case "X": kill(getpid(), SIGKILL)  // force quit
+            case "D":  // D<pane>: drop the files in $ONYX_DROP (":"-separated) on pane <pane>
+                if let k = Int(step.dropFirst()), let c = app.windowControllers.last, c.panes.indices.contains(k) {
+                    // Through a pasteboard, as a real drag delivers files (or text, via $ONYX_DROP_TEXT).
+                    let pb = NSPasteboard(name: NSPasteboard.Name("onyx-test-drop"))
+                    pb.clearContents()
+                    if let text = env["ONYX_DROP_TEXT"] {
+                        pb.setString(text, forType: .string)
+                    } else {
+                        pb.writeObjects((env["ONYX_DROP"] ?? "").split(separator: ":").map { NSURL(fileURLWithPath: String($0)) })
+                    }
+                    if let text = c.panes[k].droppedText(pb) { c.panes[k].insertDropped(text) }
+                }
             case "W": if let k = Int(step.dropFirst()) { app.scrollUp(pane: k) }
             default: break
             }

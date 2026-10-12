@@ -58,6 +58,7 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         addSubview(header)
         addSubview(terminal)
         updateFocusLook()
+        registerForDraggedTypes([.fileURL, .string])
     }
 
     func start(shell: String, args: [String], execName: String, env: [String: String]) {
@@ -145,6 +146,33 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     func setFontSize(_ size: CGFloat) { terminal.font = Theme.font(size: size) }
 
     func requestClose() { delegate?.paneWantsClose(self) }
+
+    // MARK: Drag and drop
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedText(sender.draggingPasteboard) == nil ? [] : .copy
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let text = droppedText(sender.draggingPasteboard) else { return false }
+        insertDropped(text)
+        return true
+    }
+
+    /// Files become their escaped paths (as in Terminal.app); dragged text goes in as is.
+    func droppedText(_ pb: NSPasteboard) -> String? {
+        let urls = (pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        if !urls.isEmpty { return DroppedFiles.text(for: urls.map(\.path)) }
+        return pb.string(forType: .string).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Sends dropped text like a paste, so Claude turns an image path into an attached image.
+    func insertDropped(_ text: String) {
+        guard !closed, terminal.process.running else { return }
+        focus()
+        let bracketed = terminal.getTerminal().bracketedPasteMode
+        terminal.send(txt: bracketed ? "\u{1b}[200~" + text + "\u{1b}[201~" : text)
+    }
 
     /// What to reopen this terminal as: the Claude conversation running in it (in Claude's
     /// folder), else the shell's folder.
