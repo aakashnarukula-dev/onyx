@@ -20,7 +20,7 @@ for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in
 | Drop files | Types their paths, escaped like Terminal (Claude attaches dropped images) |
 | `⌘1`…`⌘6` | Focus terminal |
 | `⌘⌥←↑↓→` | Move focus |
-| `⌘+` / `⌘-` / `⌘0` | Font bigger / smaller / default (11 pt) |
+| `⌘+` / `⌘-` / `⌘0` | Font bigger / smaller / default (14 pt) |
 
 Layout follows the count: 1 full, 2 side by side, 3 = two stacked left + one right,
 4 = 2×2, 5 = 2+2+1, 6 = 3×2. Drag the gaps to resize; adding or closing re-flows.

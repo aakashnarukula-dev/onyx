@@ -3,8 +3,8 @@ import Testing
 @testable import OnyxCore
 
 struct SettingsTests {
-    @Test func defaultFontIsElevenPoints() {
-        #expect(Settings().fontSize == 11)
+    @Test func defaultFontIsFourteenPoints() {
+        #expect(Settings().fontSize == 14)
     }
 
     @Test func corruptFileGivesDefaults() throws {
