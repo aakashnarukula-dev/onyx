@@ -9,7 +9,7 @@ import SwiftTerm
 
 /// One independent terminal: a thin header (title, close) over a SwiftTerm view.
 final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
-    let terminal: LocalProcessTerminalView
+    let terminal: OnyxTerminalView
     weak var delegate: PaneViewDelegate?
     /// Dragging the header moves the pane to another place in the grid.
     var onHeaderDrag: ((PaneView, PaneHeader.DragPhase, NSEvent) -> Void)?
@@ -25,7 +25,7 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     /// Builds the view; the shell starts on `start(shell:args:env:)`.
     init(cwd: String, fontSize: CGFloat) {
         self.cwd = cwd
-        terminal = LocalProcessTerminalView(frame: .zero)
+        terminal = OnyxTerminalView(frame: .zero)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = Theme.background.cgColor
@@ -384,6 +384,9 @@ final class PaneHeader: NSView {
 
     override var isFlipped: Bool { true }
 
+    /// Coming from another app, a click on the header selects this terminal straight away.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func layout() {
         super.layout()
         let h = bounds.height
@@ -424,6 +427,43 @@ final class PaneHeader: NSView {
     }
 
     @objc private func closeTapped() { onClose?() }
+}
+
+/// The terminal view. Coming from another app, the first click on a terminal selects it (instead
+/// of only bringing Onyx forward); that click is not passed to the program, so it can't move
+/// Claude's cursor or start a selection.
+final class OnyxTerminalView: LocalProcessTerminalView {
+    private var activatingClick: Int?  // event number of the click that may bring the window forward
+    private var swallowing = false      // that click's down … up is in progress
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        activatingClick = event?.eventNumber
+        return true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let activating = activatingClick == event.eventNumber
+        activatingClick = nil
+        swallowing = activating
+        if activating {
+            window?.makeFirstResponder(self)
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if swallowing { return }
+        super.mouseDragged(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if swallowing {
+            swallowing = false
+            return
+        }
+        super.mouseUp(with: event)
+    }
 }
 
 /// Borderless text button that brightens on hover.

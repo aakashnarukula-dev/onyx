@@ -42,6 +42,10 @@ enum DebugHooks {
                 let parts = step.dropFirst().split(separator: ".").compactMap { Int($0) }
                 if parts.count == 2 { app.grabPane(parts[0], over: parts[1]) }
             case "u": app.releasePane()
+            case "F":  // switch to Finder, so Onyx is in the background
+                NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == "com.apple.finder" }?.activate()
+            case "C":  // C<pane>: one click in the middle of pane <pane>'s terminal, through the window
+                if let k = Int(step.dropFirst()) { app.click(pane: k) }
             case "O":  // O<pane>: drag pane <pane> of the last window out to the left of it and let go
                 if let k = Int(step.dropFirst()) { app.dragPaneOut(k, intoFirstWindow: false) }
             case "J":  // J<pane>: drag pane <pane> of the last window onto the first window and let go
@@ -212,6 +216,15 @@ extension AppDelegate {
             header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w))
         }
         header.mouseUp(with: mouseEvent(.leftMouseUp, end, w))
+    }
+
+    func click(pane index: Int) {
+        guard let c = windowControllers.last, let w = c.window, c.panes.indices.contains(index) else { return }
+        let t = c.panes[index].terminal
+        let p = t.convert(CGPoint(x: t.bounds.midX, y: t.bounds.midY), to: nil)
+        report(DebugHooks.env["ONYX_SNAPSHOT"] ?? "", "click: window key=\(w.isKeyWindow) app active=\(NSApp.isActive)")
+        w.sendEvent(mouseEvent(.leftMouseDown, p, w))
+        w.sendEvent(mouseEvent(.leftMouseUp, p, w))
     }
 
     func releasePane() {
