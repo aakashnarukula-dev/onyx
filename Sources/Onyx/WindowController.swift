@@ -203,8 +203,20 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
 
     /// Close requested by the user: ask first if Claude (or anything) is still running there.
     func userClose(_ pane: PaneView) {
-        if !confirmClose([pane.closeRisk], .pane) { return }
+        let risk = pane.closeRisk
+        guard risk != .none else { close(pane); return }
+        // Say which one: its number and title, and outline it in red while asking.
+        let name = closeName(for: pane)
+        pane.markedForClosing = true
+        defer { pane.markedForClosing = false }
+        if !confirmClose([risk], .pane, name: name) { return }
         close(pane)
+    }
+
+    /// How the close question names a pane: its number and title.
+    func closeName(for pane: PaneView) -> String {
+        let number = (panes.firstIndex(of: pane) ?? 0) + 1
+        return "terminal \(number), \u{201C}\(PaneTitle.plain(pane.headerTitle))\u{201D}"
     }
 
     // MARK: Menu actions (first-responder chain)
@@ -235,7 +247,7 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
 enum CloseKind { case pane, window, app }
 
 @MainActor
-func confirmClose(_ risks: [PaneView.CloseRisk], _ kind: CloseKind) -> Bool {
+func confirmClose(_ risks: [PaneView.CloseRisk], _ kind: CloseKind, name: String? = nil) -> Bool {
     let working = risks.filter { $0 == .working }.count
     let talks = risks.filter { $0 == .conversation }.count
     guard working + talks > 0 else { return true }
@@ -248,13 +260,15 @@ func confirmClose(_ risks: [PaneView.CloseRisk], _ kind: CloseKind) -> Bool {
         if working > 0 { lines.append("Something is still working in \(n(working, "terminal", "terminals")); quitting stops it.") }
         lines.append("Your Claude conversations can be reopened next time you open Onyx.")
     case .pane, .window:
-        alert.messageText = kind == .pane ? "Close this terminal?" : "Close this window?"
+        alert.messageText = kind == .window ? "Close this window?" : name.map { "Close \($0)?" } ?? "Close this terminal?"
         if working > 0 {
             lines.append(kind == .pane ? "Something is still working in it (Claude answering, or another program); closing stops it."
                                        : "Something is still working in \(n(working, "terminal", "terminals")); closing stops it.")
         }
         if talks > 0 || working > 0 {
-            lines.append("Its Claude conversations won't come back when you reopen Onyx; `claude --resume` still finds them.")
+            lines.append(kind == .pane
+                ? "Its Claude conversation won't come back when you reopen Onyx; `claude --resume` still finds it."
+                : "Its Claude conversations won't come back when you reopen Onyx; `claude --resume` still finds them.")
         }
     }
     alert.informativeText = lines.joined(separator: " ")

@@ -238,9 +238,12 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         DispatchQueue.global(qos: .utility).async { PaneProcesses.reap([p], within: 2) }
     }
 
+    /// Red outline while a "Close terminal …?" question about this pane is open.
+    var markedForClosing = false { didSet { updateFocusLook() } }
+
     private func updateFocusLook() {
-        layer?.borderColor = (isFocused ? Theme.accent : Theme.borderIdle).cgColor
-        layer?.borderWidth = isFocused ? 1.5 : 1
+        layer?.borderColor = (markedForClosing ? Theme.danger : isFocused ? Theme.accent : Theme.borderIdle).cgColor
+        layer?.borderWidth = markedForClosing ? 2 : isFocused ? 1.5 : 1
         header.focused = isFocused
     }
 

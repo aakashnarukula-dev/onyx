@@ -125,3 +125,14 @@ public enum DroppedFiles {
         }.joined(separator: " ") + " "
     }
 }
+
+/// Terminal titles as text for a sentence: Claude puts a status symbol in front of its title
+/// ("✳ Fix login bug", "◑ …" while working), which is dropped.
+public enum PaneTitle {
+    public static func plain(_ title: String) -> String {
+        guard let first = title.unicodeScalars.first, title.count > 2,
+              !CharacterSet.alphanumerics.union(.punctuationCharacters).contains(first),
+              title.dropFirst().first == " " else { return title }
+        return String(title.dropFirst(2))
+    }
+}

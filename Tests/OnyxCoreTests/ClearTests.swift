@@ -27,3 +27,17 @@ struct DropTests {
         #expect(DroppedFiles.text(for: ["/Users/me/हिन्दी/photo_1-2.jpg"]) == "/Users/me/हिन्दी/photo_1-2.jpg ")
     }
 }
+
+struct PaneTitleTests {
+    @Test func claudeStatusSymbolIsDropped() {
+        #expect(PaneTitle.plain("✳ Admin panel chat doubt") == "Admin panel chat doubt")
+        #expect(PaneTitle.plain("◑ Contributor name mismatch") == "Contributor name mismatch")
+        #expect(PaneTitle.plain("⠂ Fixing tests") == "Fixing tests")
+    }
+
+    @Test func ordinaryTitlesStayAsTheyAre() {
+        #expect(PaneTitle.plain("~/Developer/onyx") == "~/Developer/onyx")
+        #expect(PaneTitle.plain("vim") == "vim")
+        #expect(PaneTitle.plain("") == "")
+    }
+}
