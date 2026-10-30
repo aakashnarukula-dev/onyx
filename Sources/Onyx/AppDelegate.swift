@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
         settings = Settings.load(paths)
+        updateAssistantMenu()
         zshDir = (try? ZshIntegration.write(to: paths.home.appendingPathComponent("zsh")).path) ?? ""
         if let saved = usesRealHome ? SessionState.load(paths) : nil, askToReopen(saved) {
             saved.windows.forEach(reopen)
@@ -66,17 +67,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     }
 
     /// ⌘N: a new terminal in the current window, or a new window once it holds six.
-    @objc func newPane(_ sender: Any?) {
+    @objc func newClaudePane(_ sender: Any?) { addPane(assistant: .claude) }
+    @objc func newCodexPane(_ sender: Any?) { addPane(assistant: .codex) }
+
+    @objc func chooseAssistant(_ sender: NSMenuItem) {
+        guard Assistant.allCases.indices.contains(sender.tag) else { return }
+        settings.assistant = Assistant.allCases[sender.tag]
+        if usesRealHome { try? settings.save(paths) }
+        updateAssistantMenu()
+    }
+
+    private func updateAssistantMenu() {
+        guard let menu = NSApp.mainMenu?.item(withTitle: "Shell")?.submenu?
+            .item(withTitle: "Default Assistant")?.submenu else { return }
+        for item in menu.items {
+            item.state = Assistant.allCases[item.tag] == settings.assistant ? .on : .off
+        }
+    }
+
+    @objc func newPane(_ sender: Any?) { addPane(assistant: settings.assistant) }
+
+    private func addPane(assistant: Assistant) {
         let t0 = ProcessInfo.processInfo.systemUptime
         if let c = current, c.canAddPane {
-            c.addPane()
+            c.addPane(assistant: assistant)
         } else {
-            newWindow(sender)
+            openWindow(assistant: assistant)
         }
         log(String(format: "new pane %.1f ms", (ProcessInfo.processInfo.systemUptime - t0) * 1000))
     }
 
-    @objc func newWindow(_ sender: Any?) {
+    @objc func newWindow(_ sender: Any?) { openWindow(assistant: settings.assistant) }
+
+    private func openWindow(assistant: Assistant) {
         let frame: NSRect
         if let last = current?.window?.frame {
             frame = last.offsetBy(dx: 28, dy: -28)
@@ -86,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         let c = WindowController(owner: self, frame: frame)
         controllers.append(c)
         c.showWindow(nil)
-        c.addPane()
+        c.addPane(assistant: assistant)
     }
 
     private var defaultFrame: NSRect {
@@ -109,14 +132,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
     /// (empty terminals aren't worth asking about). Test runs reopen without asking.
     private func askToReopen(_ saved: SessionState) -> Bool {
         let n = saved.conversations(where: claude.hasTranscript).count
+            + saved.windows.flatMap(\.panes).filter { $0.assistant == .codex }.count
         guard n > 0 else { return false }
         if DebugHooks.env["ONYX_SNAPSHOT"] != nil { return true }
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Reopen your last terminals?"
-        alert.informativeText = (n == 1 ? "1 Claude conversation" : "\(n) Claude conversations")
-            + " from last time. Reopen brings back the windows and terminals, each Claude where it left off."
-            + " Start Fresh opens one new terminal; `claude --resume` still finds them later."
+        alert.informativeText = "\(n) saved assistant terminals from last time. Claude resumes its conversation; Codex opens its conversation picker in the saved folder."
+            + " Start Fresh opens one new terminal. You can still use claude --resume or codex resume later."
         alert.addButton(withTitle: "Reopen")
         alert.addButton(withTitle: "Start Fresh")
         return alert.runModal() == .alertFirstButtonReturn
@@ -145,14 +168,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         try? SessionState(windows: windows).save(paths)
     }
 
-    func makePane(for controller: WindowController, restoring: SessionState.Pane?) -> PaneView {
+    func makePane(for controller: WindowController, restoring: SessionState.Pane?, assistant: Assistant?) -> PaneView {
         var cwd = FileManager.default.fileExists(atPath: developerDir) ? developerDir : NSHomeDirectory()
-        var command = PaneEnv.claudeCommand
+        let selected = restoring.map { $0.assistant ?? .claude } ?? assistant ?? settings.assistant
+        var command = selected.command
         var resuming: SessionState.Pane?
         if let restoring {
             var isDir: ObjCBool = false
             let folderThere = FileManager.default.fileExists(atPath: restoring.cwd, isDirectory: &isDir) && isDir.boolValue
             if folderThere { cwd = restoring.cwd }
+            if selected == .codex { command = "codex resume" }
             // Back into the same conversation. Claude finds it by folder, so only in its own folder;
             // one that never got a message starts fresh.
             if folderThere, let id = restoring.claudeSession, claude.hasTranscript(id: id) {
@@ -161,6 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
             }
         }
         let pane = PaneView(cwd: cwd, fontSize: CGFloat(settings.fontSize))
+        pane.assistant = selected
         pane.resuming = resuming
         let base = ProcessInfo.processInfo.environment
         let launch = PaneEnv.launch(shell: shell, firstCommand: DebugHooks.paneCommand ?? command,

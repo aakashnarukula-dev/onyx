@@ -23,6 +23,8 @@ enum DebugHooks {
             i += 1
             switch step.first {
             case "n": app.newPane(nil)
+            case "a": app.newClaudePane(nil)
+            case "b": app.newCodexPane(nil)
             case "w": if let k = Int(step.dropFirst()) { app.closePane(at: k) }
             case "s": app.snapshot(to: dir, step: i)
             case "t": if let k = Int(step.dropFirst()), let text = env["ONYX_TYPE_\(k)"] { app.type(text, intoPane: k) }

@@ -1,4 +1,5 @@
 import AppKit
+import OnyxCore
 
 enum MainMenu {
     static func build() -> NSMenu {
@@ -14,6 +15,14 @@ enum MainMenu {
 
         let shell = submenu(main, "Shell")
         shell.addItem(item("New Terminal", #selector(AppDelegate.newPane(_:)), "n"))
+        shell.addItem(item("New Claude Terminal", #selector(AppDelegate.newClaudePane(_:)), "n", [.command, .option]))
+        shell.addItem(item("New Codex Terminal (ChatGPT)", #selector(AppDelegate.newCodexPane(_:)), "n", [.command, .control]))
+        let assistants = submenu(shell, "Default Assistant")
+        for (index, assistant) in Assistant.allCases.enumerated() {
+            let choice = item(assistant.title, #selector(AppDelegate.chooseAssistant(_:)), "")
+            choice.tag = index
+            assistants.addItem(choice)
+        }
         shell.addItem(item("New Window", #selector(AppDelegate.newWindow(_:)), "n", [.command, .shift]))
         shell.addItem(.separator())
         shell.addItem(item("Close Terminal", #selector(AppDelegate.closePane(_:)), "w"))

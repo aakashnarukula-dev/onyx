@@ -63,6 +63,18 @@ struct PaneEnvTests {
         #expect(try String(contentsOf: out.appendingPathComponent(".zshenv"), encoding: .utf8) == s)
     }
 
+    @Test func bothAssistantsLaunchThroughLoginShells() {
+        for assistant in Assistant.allCases {
+            let zsh = PaneEnv.launch(shell: "/bin/zsh", firstCommand: assistant.command, zdotdir: "/z", userZdotdir: nil)
+            #expect(zsh.env["ONYX_FIRST_COMMAND"] == assistant.command)
+            let bash = PaneEnv.launch(shell: "/bin/bash", firstCommand: assistant.command, zdotdir: "/z", userZdotdir: nil)
+            #expect(bash.args[3].contains("command -v \(assistant.rawValue)"))
+            #expect(bash.args[3].contains(assistant.command))
+        }
+        #expect(Assistant.codex.command == "codex")
+        #expect(Assistant.claude.command == "claude --permission-mode auto")
+    }
+
     @Test func loginShellFallsBackToZsh() {
         #expect(PaneEnv.loginShell(passwdShell: nil) == "/bin/zsh")
         #expect(PaneEnv.loginShell(passwdShell: "/bin/bash") == "/bin/bash")

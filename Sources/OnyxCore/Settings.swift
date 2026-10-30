@@ -1,8 +1,24 @@
 import Foundation
 
-/// App settings (`settings.json`): just the font size.
+public enum Assistant: String, Codable, CaseIterable, Sendable {
+    case claude, codex
+
+    public var title: String { self == .claude ? "Claude" : "Codex (ChatGPT)" }
+    public var command: String { self == .claude ? PaneEnv.claudeCommand : "codex" }
+}
+
+/// App settings (`settings.json`).
 public struct Settings: Codable, Equatable, Sendable {
     public var fontSize: Double = 14
+    public var assistant: Assistant = .claude
+
+    private enum CodingKeys: String, CodingKey { case fontSize, assistant }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        fontSize = try values.decodeIfPresent(Double.self, forKey: .fontSize) ?? 14
+        assistant = try values.decodeIfPresent(Assistant.self, forKey: .assistant) ?? .claude
+    }
 
     public init() {}
 

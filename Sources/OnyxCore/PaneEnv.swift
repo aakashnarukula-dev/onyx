@@ -46,9 +46,10 @@ public enum PaneEnv {
             return Launch(args: [], execName: "-" + name, env: env)
         }
         let quoted = "'" + shell.replacingOccurrences(of: "'", with: "'\\''") + "'"
-        let guarded = firstCommand.hasPrefix("claude")
-            ? "if command -v claude >/dev/null 2>&1; then \(firstCommand); "
-              + "else printf '\\033[2mclaude not found — plain shell\\033[0m\\n'; fi"
+        let executable = firstCommand.split(separator: " ").first.map(String.init) ?? ""
+        let guarded = ["claude", "codex"].contains(executable)
+            ? "if command -v \(executable) >/dev/null 2>&1; then \(firstCommand); "
+              + "else printf '\\033[2m\(executable) not found — plain shell\\033[0m\\n'; fi"
             : firstCommand
         return Launch(args: ["-l", "-i", "-c", "\(guarded); exec \(quoted) -l -i"], execName: "-" + name, env: [:])
     }
@@ -88,6 +89,8 @@ public enum ZshIntegration {
         add-zle-hook-widget -d zle-line-init _onyx_type_first
         if [[ "$_onyx_first" == claude* ]] && (( ! $+commands[claude] )); then
           zle -M 'claude not found — plain shell'
+        elif [[ "$_onyx_first" == codex || "$_onyx_first" == codex\ * ]] && (( ! $+commands[codex] )); then
+          zle -M 'codex not found — install Codex CLI, then run codex'
         else
           BUFFER="$_onyx_first"
           zle accept-line

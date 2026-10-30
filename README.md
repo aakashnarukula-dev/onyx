@@ -2,8 +2,8 @@
 
 A fast, pitch-black macOS app that groups up to six normal terminals in one window. Each
 terminal is exactly what Terminal.app gives you — your login shell started the same way, your
-environment, your `gh`/git/vercel logins — except that `claude --permission-mode auto` is typed
-for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in your shell.
+environment, your `gh`/git/vercel logins — with Claude Code or OpenAI Codex (sign in with your ChatGPT account).
+The selected assistant is started at the first prompt; Claude remains the default. Ctrl-Z / `fg` work on it; quit Claude and you're in your shell.
 
 ![Four Claude terminals in one Onyx window, each header named after its task](docs/screenshots/four-terminals.png)
 
@@ -12,6 +12,8 @@ for you at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in
 | Key | Action |
 |---|---|
 | `⌘N` / `+` | New terminal (the 7th opens a new window) |
+| `⌘⌥N` | New Claude terminal |
+| `⌘⌃N` | New Codex terminal (ChatGPT) |
 | `⌘⇧N` | New window |
 | `⌘W` | Close terminal (asks first if it holds a Claude conversation or something is working) |
 | `⌘K` | Clear |
@@ -47,11 +49,23 @@ started yourself, or one after `/clear`, is followed too. A conversation with no
 starts fresh, and if none had messages Onyx doesn't ask and just opens one terminal; programs other than Claude (dev servers, ssh) don't come back; a window you
 close on purpose doesn't come back.
 
+Choose **Shell > Default Assistant > Claude / Codex (ChatGPT)** to set what `⌘N`, `+`,
+new windows, and fresh launches open. Use **Shell > New Claude Terminal** or
+**New Codex Terminal (ChatGPT)** to mix both in one window without changing the default.
+Codex uses its normal permissions and login; Onyx does not add approval-bypass flags.
+
+Saved Codex panes reopen `codex resume` in their saved folder, where you choose a conversation.
+Onyx does not yet track the exact Codex conversation ID. Claude's automatic conversation
+restore remains unchanged. File drops paste paths; image attachment behavior depends on the CLI.
+
 ## Install
 
 Needs macOS 14 or newer and Apple's Command Line Tools (`xcode-select --install`) or Xcode.
 For terminals to start Claude, install [Claude Code](https://docs.claude.com/en/docs/claude-code)
-so `claude` is on your PATH; without it each terminal is a plain shell.
+so `claude` is on your PATH. For ChatGPT, install [Codex CLI](https://learn.chatgpt.com/docs/cli)
+(`npm install -g @openai/codex`), run `codex`, and select **Sign in with ChatGPT**.
+Both CLIs use your existing local login. If the selected CLI is missing, Onyx leaves a plain shell
+with a message; install the CLI and run `claude` or `codex` there.
 
 ```
 git clone https://github.com/aakashnarukula-dev/onyx.git

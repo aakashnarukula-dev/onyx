@@ -178,20 +178,21 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     /// folder), else the shell's folder.
     func sessionPane(_ claude: ClaudeSessions) -> SessionState.Pane {
         let shell = terminal.process.shellPid
-        guard !closed, terminal.process.running, shell > 0 else { return resuming ?? .init(cwd: cwd, claudeSession: nil) }
+        guard !closed, terminal.process.running, shell > 0 else { return resuming ?? .init(cwd: cwd, claudeSession: nil, assistant: assistant) }
         for pid in childPids(of: shell) {
             if let s = claude.running(pid: pid) {
                 resuming = nil
-                return .init(cwd: s.cwd, claudeSession: s.id)
+                return .init(cwd: s.cwd, claudeSession: s.id, assistant: .claude)
             }
         }
         // A reopened conversation counts as here until its Claude has been seen running: it may
         // still be starting, or `--resume` may have failed (login expired, Ctrl-C) — either way
         // quitting now must not lose it.
-        return resuming ?? .init(cwd: currentDirectory(of: shell) ?? cwd, claudeSession: nil)
+        return resuming ?? .init(cwd: currentDirectory(of: shell) ?? cwd, claudeSession: nil, assistant: assistant)
     }
 
     /// The saved conversation this pane was reopened to resume, until Claude is seen running.
+    var assistant: Assistant = .claude
     var resuming: SessionState.Pane?
 
     /// Claude's own records of its sessions, shared by every pane.

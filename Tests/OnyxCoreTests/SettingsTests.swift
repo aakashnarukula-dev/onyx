@@ -20,12 +20,14 @@ struct SettingsTests {
         try FileManager.default.createDirectory(at: paths.home, withIntermediateDirectories: true)
         try #"{"activeGitHub":"x","fontSize":15,"vercelLabels":[]}"#.write(to: paths.settings, atomically: true, encoding: .utf8)
         #expect(Settings.load(paths).fontSize == 15)
+        #expect(Settings.load(paths).assistant == .claude)
     }
 
     @Test func roundTrip() throws {
         let paths = tempPaths()
         var s = Settings()
         s.fontSize = 16
+        s.assistant = .codex
         try s.save(paths)
         #expect(Settings.load(paths) == s)
     }

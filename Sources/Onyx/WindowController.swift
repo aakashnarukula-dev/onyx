@@ -29,7 +29,7 @@ final class TopBar: NSView {
 }
 
 @MainActor protocol WindowControllerDelegate: AnyObject {
-    func makePane(for controller: WindowController, restoring: SessionState.Pane?) -> PaneView
+    func makePane(for controller: WindowController, restoring: SessionState.Pane?, assistant: Assistant?) -> PaneView
     func windowControllerDidClose(_ controller: WindowController)
     func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint)
 }
@@ -119,9 +119,9 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
     // MARK: Panes
 
     /// Adds a terminal; `restoring` reopens one saved from a previous run.
-    func addPane(restoring: SessionState.Pane? = nil) {
+    func addPane(restoring: SessionState.Pane? = nil, assistant: Assistant? = nil) {
         guard canAddPane, let host else { return }
-        let pane = host.makePane(for: self, restoring: restoring)
+        let pane = host.makePane(for: self, restoring: restoring, assistant: assistant)
         pane.delegate = self
         panes.append(pane)
         grid.setPanes(panes)
@@ -258,17 +258,17 @@ func confirmClose(_ risks: [PaneView.CloseRisk], _ kind: CloseKind, name: String
     case .app:
         alert.messageText = "Quit Onyx?"
         if working > 0 { lines.append("Something is still working in \(n(working, "terminal", "terminals")); quitting stops it.") }
-        lines.append("Your Claude conversations can be reopened next time you open Onyx.")
+        lines.append("Next launch can reopen Claude conversations and the Codex conversation picker.")
     case .pane, .window:
         alert.messageText = kind == .window ? "Close this window?" : name.map { "Close \($0)?" } ?? "Close this terminal?"
         if working > 0 {
-            lines.append(kind == .pane ? "Something is still working in it (Claude answering, or another program); closing stops it."
+            lines.append(kind == .pane ? "Something is still working in it (Claude, Codex, or another program); closing stops it."
                                        : "Something is still working in \(n(working, "terminal", "terminals")); closing stops it.")
         }
         if talks > 0 || working > 0 {
             lines.append(kind == .pane
-                ? "Its Claude conversation won't come back when you reopen Onyx; `claude --resume` still finds it."
-                : "Its Claude conversations won't come back when you reopen Onyx; `claude --resume` still finds them.")
+                ? "This terminal will not reopen automatically. Use claude --resume or codex resume to find saved conversations."
+                : "These terminals will not reopen automatically. Use claude --resume or codex resume to find saved conversations.")
         }
     }
     alert.informativeText = lines.joined(separator: " ")

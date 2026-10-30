@@ -97,3 +97,21 @@ struct ClaudeSessionsTests {
         #expect(ClaudeSessions(env: ["HOME": "/Users/me"]).configDir.path == "/Users/me/.claude")
     }
 }
+
+struct AssistantSessionTests {
+    @Test func mixedProvidersRoundTrip() throws {
+        let state = SessionState(windows: [.init(frame: [0, 0, 800, 600], panes: [
+            .init(cwd: "/tmp", claudeSession: nil, assistant: .claude),
+            .init(cwd: "/tmp", claudeSession: nil, assistant: .codex)
+        ])])
+        let data = try JSONEncoder().encode(state)
+        #expect(try JSONDecoder().decode(SessionState.self, from: data) == state)
+    }
+
+    @Test func legacyPaneStillLoads() throws {
+        let data = Data(#"{"cwd":"/tmp"}"#.utf8)
+        let pane = try JSONDecoder().decode(SessionState.Pane.self, from: data)
+        #expect(pane.assistant == nil)
+        #expect(pane.claudeSession == nil)
+    }
+}

@@ -7,10 +7,12 @@ public struct SessionState: Codable, Equatable, Sendable {
     public struct Pane: Codable, Equatable, Sendable {
         public var cwd: String
         public var claudeSession: String?
+        public var assistant: Assistant?
 
-        public init(cwd: String, claudeSession: String?) {
+        public init(cwd: String, claudeSession: String?, assistant: Assistant? = nil) {
             self.cwd = cwd
             self.claudeSession = claudeSession
+            self.assistant = assistant
         }
     }
 
