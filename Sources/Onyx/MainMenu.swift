@@ -17,6 +17,7 @@ enum MainMenu {
         shell.addItem(item("New Terminal", #selector(AppDelegate.newPane(_:)), "n"))
         shell.addItem(item("New Claude Terminal", #selector(AppDelegate.newClaudePane(_:)), "n", [.command, .option]))
         shell.addItem(item("New Codex Terminal (ChatGPT)", #selector(AppDelegate.newCodexPane(_:)), "n", [.command, .control]))
+        shell.addItem(item("Ask When Opening a Terminal", #selector(AppDelegate.toggleAssistantPicker(_:)), ""))
         let assistants = submenu(shell, "Default Assistant")
         for (index, assistant) in Assistant.allCases.enumerated() {
             let choice = item(assistant.title, #selector(AppDelegate.chooseAssistant(_:)), "")

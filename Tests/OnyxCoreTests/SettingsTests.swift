@@ -5,6 +5,7 @@ import Testing
 struct SettingsTests {
     @Test func defaultFontIsFourteenPoints() {
         #expect(Settings().fontSize == 14)
+        #expect(Settings().askForAssistant)
     }
 
     @Test func corruptFileGivesDefaults() throws {
@@ -21,6 +22,7 @@ struct SettingsTests {
         try #"{"activeGitHub":"x","fontSize":15,"vercelLabels":[]}"#.write(to: paths.settings, atomically: true, encoding: .utf8)
         #expect(Settings.load(paths).fontSize == 15)
         #expect(Settings.load(paths).assistant == .claude)
+        #expect(Settings.load(paths).askForAssistant)
     }
 
     @Test func roundTrip() throws {
@@ -28,6 +30,7 @@ struct SettingsTests {
         var s = Settings()
         s.fontSize = 16
         s.assistant = .codex
+        s.askForAssistant = false
         try s.save(paths)
         #expect(Settings.load(paths) == s)
     }

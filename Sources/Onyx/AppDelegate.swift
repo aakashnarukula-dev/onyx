@@ -77,7 +77,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         updateAssistantMenu()
     }
 
+    @objc func toggleAssistantPicker(_ sender: Any?) {
+        settings.askForAssistant.toggle()
+        if usesRealHome { try? settings.save(paths) }
+        updateAssistantMenu()
+    }
+
+    private var choosingAssistant = false
+
+    /// Fresh terminals offer both assistants unless the user explicitly remembers a choice.
+    private func assistantForNewTerminal() -> Assistant? {
+        guard settings.askForAssistant else { return settings.assistant }
+        // Existing scripted terminal tests stay noninteractive and never change preferences.
+        if DebugHooks.env["ONYX_SNAPSHOT"] != nil { return settings.assistant }
+        guard !choosingAssistant else { return nil }
+        choosingAssistant = true
+        defer { choosingAssistant = false }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Choose an assistant"
+        alert.informativeText = "Open Claude Code or Codex with your ChatGPT account in a new terminal."
+        alert.addButton(withTitle: "Claude Code")
+        alert.addButton(withTitle: "Codex (ChatGPT)")
+        alert.addButton(withTitle: "Cancel")
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = "Use this assistant automatically next time"
+        let assistant: Assistant
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: assistant = .claude
+        case .alertSecondButtonReturn: assistant = .codex
+        default: return nil
+        }
+        settings.assistant = assistant
+        settings.askForAssistant = alert.suppressionButton?.state != .on
+        if usesRealHome { try? settings.save(paths) }
+        updateAssistantMenu()
+        return assistant
+    }
+
     private func updateAssistantMenu() {
+        NSApp.mainMenu?.item(withTitle: "Shell")?.submenu?
+            .item(withTitle: "Ask When Opening a Terminal")?.state = settings.askForAssistant ? .on : .off
         guard let menu = NSApp.mainMenu?.item(withTitle: "Shell")?.submenu?
             .item(withTitle: "Default Assistant")?.submenu else { return }
         for item in menu.items {
@@ -85,7 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         }
     }
 
-    @objc func newPane(_ sender: Any?) { addPane(assistant: settings.assistant) }
+    @objc func newPane(_ sender: Any?) {
+        guard let assistant = assistantForNewTerminal() else { return }
+        addPane(assistant: assistant)
+    }
 
     private func addPane(assistant: Assistant) {
         let t0 = ProcessInfo.processInfo.systemUptime
@@ -97,7 +140,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         log(String(format: "new pane %.1f ms", (ProcessInfo.processInfo.systemUptime - t0) * 1000))
     }
 
-    @objc func newWindow(_ sender: Any?) { openWindow(assistant: settings.assistant) }
+    @objc func newWindow(_ sender: Any?) {
+        guard let assistant = assistantForNewTerminal() else { return }
+        openWindow(assistant: assistant)
+    }
 
     private func openWindow(assistant: Assistant) {
         let frame: NSRect

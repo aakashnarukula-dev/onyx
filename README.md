@@ -3,7 +3,7 @@
 A fast, pitch-black macOS app that groups up to six normal terminals in one window. Each
 terminal is exactly what Terminal.app gives you — your login shell started the same way, your
 environment, your `gh`/git/vercel logins — with Claude Code or OpenAI Codex (sign in with your ChatGPT account).
-The selected assistant is started at the first prompt; Claude remains the default. Ctrl-Z / `fg` work on it; quit Claude and you're in your shell.
+On fresh launch, choose Claude Code or Codex (ChatGPT). The selected assistant starts at the first prompt. Ctrl-Z / `fg` work on it; quit Claude and you're in your shell.
 
 ![Four Claude terminals in one Onyx window, each header named after its task](docs/screenshots/four-terminals.png)
 
@@ -49,8 +49,10 @@ started yourself, or one after `/clear`, is followed too. A conversation with no
 starts fresh, and if none had messages Onyx doesn't ask and just opens one terminal; programs other than Claude (dev servers, ssh) don't come back; a window you
 close on purpose doesn't come back.
 
-Choose **Shell > Default Assistant > Claude / Codex (ChatGPT)** to set what `⌘N`, `+`,
-new windows, and fresh launches open. Use **Shell > New Claude Terminal** or
+Fresh launches, `⌘N`, `+`, and new windows show an assistant picker. Check
+**Use this assistant automatically next time** to skip the picker for future terminals.
+Turn **Shell > Ask When Opening a Terminal** back on to show it again.
+**Shell > Default Assistant > Claude / Codex (ChatGPT)** sets the assistant used when the picker is off. Use **Shell > New Claude Terminal** or
 **New Codex Terminal (ChatGPT)** to mix both in one window without changing the default.
 Codex uses its normal permissions and login; Onyx does not add approval-bypass flags.
 

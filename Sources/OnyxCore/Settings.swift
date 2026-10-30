@@ -11,13 +11,15 @@ public enum Assistant: String, Codable, CaseIterable, Sendable {
 public struct Settings: Codable, Equatable, Sendable {
     public var fontSize: Double = 14
     public var assistant: Assistant = .claude
+    public var askForAssistant: Bool = true
 
-    private enum CodingKeys: String, CodingKey { case fontSize, assistant }
+    private enum CodingKeys: String, CodingKey { case fontSize, assistant, askForAssistant }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         fontSize = try values.decodeIfPresent(Double.self, forKey: .fontSize) ?? 14
         assistant = try values.decodeIfPresent(Assistant.self, forKey: .assistant) ?? .claude
+        askForAssistant = try values.decodeIfPresent(Bool.self, forKey: .askForAssistant) ?? true
     }
 
     public init() {}
