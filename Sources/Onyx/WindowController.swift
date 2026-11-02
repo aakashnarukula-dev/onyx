@@ -31,7 +31,7 @@ final class TopBar: NSView {
 @MainActor protocol WindowControllerDelegate: AnyObject {
     func makePane(for controller: WindowController, restoring: SessionState.Pane?, assistant: Assistant?) -> PaneView
     func windowControllerDidClose(_ controller: WindowController)
-    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint)
+    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint, intoNewWindow: Bool)
 }
 
 /// One Onyx window holding up to `GridLayout.maxPanes` independent terminals.
@@ -68,9 +68,9 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
         window.contentView = content
         content.addSubview(grid)
         grid.onReorder = { [weak self] order in self?.panes = order }
-        grid.onTearOff = { [weak self] pane, point in
+        grid.onTearOff = { [weak self] pane, point, intoNewWindow in
             guard let self else { return }
-            self.host?.movePane(pane, from: self, toScreenPoint: point)
+            self.host?.movePane(pane, from: self, toScreenPoint: point, intoNewWindow: intoNewWindow)
         }
         content.addSubview(topBar)
 

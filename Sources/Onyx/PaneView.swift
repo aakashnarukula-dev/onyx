@@ -11,7 +11,7 @@ import SwiftTerm
 final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     let terminal: OnyxTerminalView
     weak var delegate: PaneViewDelegate?
-    /// Dragging the header moves the pane to another place in the grid.
+    /// Dragging the header detaches the pane; Option-drag reorders it.
     var onHeaderDrag: ((PaneView, PaneHeader.DragPhase, NSEvent) -> Void)?
     let header = PaneHeader()
     private var closed = false
@@ -49,6 +49,7 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         terminal.subviews.compactMap { $0 as? NSScroller }.forEach { $0.isHidden = true }
 
         header.title = (cwd as NSString).abbreviatingWithTildeInPath
+        header.toolTip = "Drag to a separate window. Option-drag to rearrange terminals."
         header.onClose = { [weak self] in self?.requestClose() }
         header.onClick = { [weak self] in self?.focus() }
         header.onDrag = { [weak self] phase, event in
@@ -387,6 +388,14 @@ final class PaneHeader: NSView {
 
     /// Coming from another app, a click on the header selects this terminal straight away.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    /// The title and status dot are part of the drag handle; only the close button takes clicks.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        return hit === closeButton || hit.isDescendant(of: closeButton) ? hit : self
+    }
 
     override func layout() {
         super.layout()

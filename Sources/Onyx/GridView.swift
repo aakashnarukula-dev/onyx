@@ -149,6 +149,7 @@ final class GridView: NSView {
         let grab: CGPoint  // cursor offset inside the dragged pane
         let placeholder: NSView
         let token: Int
+        let rearranging: Bool
         var dropping = false  // released; settling into place
     }
 
@@ -160,15 +161,16 @@ final class GridView: NSView {
         if let m = move, m.pane !== pane || m.dropping { return }
         let p = convert(event.locationInWindow, from: nil)
         switch phase {
-        case .began: beginMove(pane, at: p)
+        case .began: beginMove(pane, at: p, rearranging: event.modifierFlags.contains(.option))
         case .moved: updateMove(to: p)
         case .ended:
-            // Let go outside the window: the pane leaves for a window of its own (or another Onyx window).
+            // Ordinary drags always detach, including inside a maximized/full-screen window.
+            // Option-drag keeps the existing reorder / transfer gesture.
             if let w = window, let m = move, !m.dropping {
                 let screen = w.convertPoint(toScreen: event.locationInWindow)
-                if !w.frame.contains(screen) {
+                if !m.rearranging || !w.frame.contains(screen) {
                     cancelMove()
-                    onTearOff?(m.pane, screen)
+                    onTearOff?(m.pane, screen, !m.rearranging)
                     return
                 }
             }
@@ -176,10 +178,10 @@ final class GridView: NSView {
         }
     }
 
-    /// Called when a pane is dragged out of the window and let go, with the screen point.
-    var onTearOff: ((PaneView, NSPoint) -> Void)?
+    /// Released pane, screen position, and whether it must get a new window.
+    var onTearOff: ((PaneView, NSPoint, Bool) -> Void)?
 
-    private func beginMove(_ pane: PaneView, at p: CGPoint) {
+    private func beginMove(_ pane: PaneView, at p: CGPoint, rearranging: Bool) {
         guard move == nil, panes.count > 1, let from = panes.firstIndex(of: pane) else { return }
         let placeholder = PassThroughView(frame: pane.frame)
         placeholder.wantsLayer = true
@@ -196,7 +198,7 @@ final class GridView: NSView {
         moveCount += 1
         move = Move(pane: pane, from: from, to: from, slots: panes.map(\.frame),
                     grab: CGPoint(x: p.x - pane.frame.minX, y: p.y - pane.frame.minY), placeholder: placeholder,
-                    token: moveCount)
+                    token: moveCount, rearranging: rearranging)
         NSCursor.closedHand.push()
     }
 
@@ -204,7 +206,8 @@ final class GridView: NSView {
         guard var m = move else { return }
         // Moving (not resizing) the dragged terminal: nothing is redrawn, the program sees no resize.
         m.pane.setFrameOrigin(CGPoint(x: p.x - m.grab.x, y: p.y - m.grab.y))
-        m.pane.alphaValue = bounds.contains(p) ? 0.94 : 0.6  // fainter: letting go here tears it off
+        m.pane.alphaValue = m.rearranging && bounds.contains(p) ? 0.94 : 0.6
+        guard m.rearranging else { return }
         guard let to = GridLayout.slot(at: p, in: m.slots), to != m.to else { return }
         m.to = to
         move = m

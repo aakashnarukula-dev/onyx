@@ -247,10 +247,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         saveSession()  // a window closed on purpose doesn't come back
     }
 
-    /// A pane dragged out of `source` and let go at `point` (screen): into the Onyx window under
-    /// the point if it has room, else into a new window placed where it was let go.
-    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint) {
-        let target = controllers.first { $0 !== source && $0.canAddPane && ($0.window?.frame.contains(point) ?? false) }
+    /// A normal header drag creates a new window. Option-drag can join another window with room.
+    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint, intoNewWindow: Bool) {
+        let target = intoNewWindow ? nil : controllers.first { $0 !== source && $0.canAddPane && ($0.window?.frame.contains(point) ?? false) }
         let size = CGSize(width: max(pane.frame.width + Theme.margin * 2, 640),
                           height: max(pane.frame.height + Theme.topBarHeight + Theme.margin * 2, 400))
         source.detach(pane)
@@ -267,6 +266,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
             frame.origin.y = min(max(frame.minY, screen.minY), screen.maxY - frame.height)
         }
         let c = WindowController(owner: self, frame: frame)
+        if source.window?.styleMask.contains(.fullScreen) == true {
+            c.window?.collectionBehavior.insert(.fullScreenAuxiliary)
+        }
         controllers.append(c)
         c.showWindow(nil)
         c.adopt(pane)

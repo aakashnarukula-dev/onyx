@@ -44,6 +44,7 @@ enum DebugHooks {
                 let parts = step.dropFirst().split(separator: ".").compactMap { Int($0) }
                 if parts.count == 2 { app.grabPane(parts[0], over: parts[1]) }
             case "u": app.releasePane()
+            case "h": app.checkPaneDrag()
             case "F":  // switch to Finder, so Onyx is in the background
                 NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == "com.apple.finder" }?.activate()
             case "C":  // C<pane>: one click in the middle of pane <pane>'s terminal, through the window
@@ -196,10 +197,10 @@ extension AppDelegate {
         let start = header.convert(CGPoint(x: 60, y: 10), to: nil)
         let f = c.panes[to].frame
         let end = c.grid.convert(CGPoint(x: f.midX, y: f.midY), to: nil)
-        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w))
+        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w, modifiers: .option))
         for k in 1...10 {
             let t = CGFloat(k) / 10
-            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w))
+            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w, modifiers: .option))
         }
         AppDelegate.held = (header, w, end)
     }
@@ -212,10 +213,10 @@ extension AppDelegate {
         if intoFirstWindow, let first = windowControllers.first?.window {
             end = w.convertPoint(fromScreen: CGPoint(x: first.frame.midX, y: first.frame.midY))
         }
-        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w))
+        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w, modifiers: .option))
         for k in 1...10 {
             let t = CGFloat(k) / 10
-            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w))
+            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w, modifiers: .option))
         }
         header.mouseUp(with: mouseEvent(.leftMouseUp, end, w))
     }
@@ -235,9 +236,42 @@ extension AppDelegate {
         header.mouseUp(with: mouseEvent(.leftMouseUp, p, w))
     }
 
-    private func mouseEvent(_ type: NSEvent.EventType, _ p: CGPoint, _ w: NSWindow) -> NSEvent {
-        NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber,
+    private func mouseEvent(_ type: NSEvent.EventType, _ p: CGPoint, _ w: NSWindow,
+                            modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
+        NSEvent.mouseEvent(with: type, location: p, modifierFlags: modifiers, timestamp: 0, windowNumber: w.windowNumber,
                            context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+    }
+
+    /// Regression through AppKit's hit testing and event dispatch, using only disposable test panes.
+    func checkPaneDrag() {
+        guard let source = windowControllers.last, let window = source.window, source.panes.count == 2 else {
+            preconditionFailure("Pane drag check needs two test panes")
+        }
+        let pane = source.panes[0]
+        let other = source.panes[1]
+        let pid = pane.terminal.process.shellPid
+        let dir = DebugHooks.env["ONYX_SNAPSHOT"] ?? ""
+        let header = pane.header
+        let start = header.convert(CGPoint(x: 60, y: 10), to: nil)
+        let titlePoint = header.convert(CGPoint(x: 60, y: 10), to: pane)
+        precondition(header.hitTest(titlePoint) === header, "Title must receive header drags")
+        let closePoint = header.convert(CGPoint(x: header.bounds.maxX - 15, y: 10), to: pane)
+        precondition(header.hitTest(closePoint) is NSButton, "Close button must still receive clicks")
+        window.sendEvent(mouseEvent(.leftMouseDown, start, window))
+        window.sendEvent(mouseEvent(.leftMouseUp, start, window))
+        precondition(windowControllers.count == 1 && source.panes.count == 2, "Click must not detach")
+        window.sendEvent(mouseEvent(.leftMouseDown, start, window))
+        let end = CGPoint(x: start.x + 50, y: start.y - 80)
+        precondition(window.frame.contains(window.convertPoint(toScreen: end)), "Drop must stay inside original window")
+        window.sendEvent(mouseEvent(.leftMouseDragged, CGPoint(x: start.x + 10, y: start.y - 10), window))
+        window.sendEvent(mouseEvent(.leftMouseDragged, end, window))
+        window.sendEvent(mouseEvent(.leftMouseUp, end, window))
+        precondition(windowControllers.count == 2, "Drag inside original window must detach")
+        precondition(source.panes.count == 1 && source.panes[0] === other, "Other pane must stay put")
+        precondition(windowControllers.last?.panes.first === pane && pane.window !== window, "Same pane must move to new window")
+        precondition(pane.terminal.process.running && pane.terminal.process.shellPid == pid, "Shell must survive detaching")
+        pane.terminal.send(txt: "printf 'DETACHED_SHELL_ALIVE\\n'\n")
+        report(dir, "PASS: title drag routing, close button, click, detach inside window, same running shell pid=\(pid)")
     }
 
     /// A trackpad-style scroll up over pane `index`.
