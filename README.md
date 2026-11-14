@@ -57,9 +57,12 @@ Fresh launches, `⌘N`, `+`, and new windows show an assistant picker. Check
 Turn **Shell > Ask When Opening a Terminal** back on to show it again.
 **Shell > Default Assistant > Claude / Codex (ChatGPT)** sets the assistant used when the picker is off. Use **Shell > New Claude Terminal** or
 **New Codex Terminal (ChatGPT)** to mix both in one window without changing the default.
-Codex uses its normal permissions and login; Onyx does not add approval-bypass flags.
+Codex starts with **Full Access** in every new and restored terminal
+(`--sandbox danger-full-access --ask-for-approval never`), using your existing login.
+It can edit files outside the workspace and access the internet without approval.
 
-Saved Codex panes reopen `codex resume` in their saved folder, where you choose a conversation.
+Saved Codex panes reopen `codex resume --sandbox danger-full-access --ask-for-approval never`
+in their saved folder, where you choose a conversation.
 Onyx does not yet track the exact Codex conversation ID. Claude's automatic conversation
 restore remains unchanged. File drops paste paths; image attachment behavior depends on the CLI.
 

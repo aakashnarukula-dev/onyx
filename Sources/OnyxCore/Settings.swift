@@ -4,7 +4,7 @@ public enum Assistant: String, Codable, CaseIterable, Sendable {
     case claude, codex
 
     public var title: String { self == .claude ? "Claude" : "Codex (ChatGPT)" }
-    public var command: String { self == .claude ? PaneEnv.claudeCommand : "codex" }
+    public var command: String { self == .claude ? PaneEnv.claudeCommand : PaneEnv.codexCommand() }
 }
 
 /// App settings (`settings.json`).

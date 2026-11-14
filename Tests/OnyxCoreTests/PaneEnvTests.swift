@@ -71,8 +71,20 @@ struct PaneEnvTests {
             #expect(bash.args[3].contains("command -v \(assistant.rawValue)"))
             #expect(bash.args[3].contains(assistant.command))
         }
-        #expect(Assistant.codex.command == "codex")
+        #expect(Assistant.codex.command == "codex --sandbox danger-full-access --ask-for-approval never")
         #expect(Assistant.claude.command == "claude --permission-mode auto")
+    }
+
+    @Test func freshAndRestoredCodexPanesUseFullAccessInBothShells() {
+        for resuming in [false, true] {
+            let command = PaneEnv.codexCommand(resuming: resuming)
+            let expected = resuming ? "codex resume" : "codex"
+            #expect(command == "\(expected) --sandbox danger-full-access --ask-for-approval never")
+            let zsh = PaneEnv.launch(shell: "/bin/zsh", firstCommand: command, zdotdir: "/z", userZdotdir: nil)
+            #expect(zsh.env["ONYX_FIRST_COMMAND"] == command)
+            let bash = PaneEnv.launch(shell: "/bin/bash", firstCommand: command, zdotdir: "/z", userZdotdir: nil)
+            #expect(bash.args[3].contains("then \(command);"))
+        }
     }
 
     @Test func loginShellFallsBackToZsh() {

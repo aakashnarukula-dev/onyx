@@ -223,7 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
             var isDir: ObjCBool = false
             let folderThere = FileManager.default.fileExists(atPath: restoring.cwd, isDirectory: &isDir) && isDir.boolValue
             if folderThere { cwd = restoring.cwd }
-            if selected == .codex { command = "codex resume" }
+            if selected == .codex { command = PaneEnv.codexCommand(resuming: true) }
             // Back into the same conversation. Claude finds it by folder, so only in its own folder;
             // one that never got a message starts fresh.
             if folderThere, let id = restoring.claudeSession, claude.hasTranscript(id: id) {

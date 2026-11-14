@@ -5,6 +5,12 @@ import Foundation
 public enum PaneEnv {
     public static let claudeCommand = "claude --permission-mode auto"
 
+    /// Full Access for both fresh Codex panes and restored conversations.
+    public static func codexCommand(resuming: Bool = false) -> String {
+        let command = resuming ? "codex resume" : "codex"
+        return "\(command) --sandbox danger-full-access --ask-for-approval never"
+    }
+
     /// Variables other terminals (or a Claude session) set to describe themselves. Passing them on
     /// would make tools in the pane think they run inside that terminal.
     static func isLauncherVar(_ k: String) -> Bool {
