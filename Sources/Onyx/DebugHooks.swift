@@ -72,7 +72,7 @@ enum DebugHooks {
             case "W": if let k = Int(step.dropFirst()) { app.scrollUp(pane: k) }
             default: break
             }
-            let delay = step == "s" ? 0.2 : step == "P" ? 10 : 0.8
+            let delay = step == "h" ? 12 : step == "s" ? 0.2 : step == "P" ? 10 : 0.8
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: next)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: next)
@@ -196,11 +196,11 @@ extension AppDelegate {
         let header = c.panes[from].header
         let start = header.convert(CGPoint(x: 60, y: 10), to: nil)
         let f = c.panes[to].frame
-        let end = c.grid.convert(CGPoint(x: f.midX, y: f.midY), to: nil)
-        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w, modifiers: .option))
+        let end = c.grid.convert(CGPoint(x: f.midX, y: f.maxY - Theme.headerHeight / 2), to: nil)
+        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w, modifiers: []))
         for k in 1...10 {
             let t = CGFloat(k) / 10
-            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w, modifiers: .option))
+            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w, modifiers: []))
         }
         AppDelegate.held = (header, w, end)
     }
@@ -213,10 +213,10 @@ extension AppDelegate {
         if intoFirstWindow, let first = windowControllers.first?.window {
             end = w.convertPoint(fromScreen: CGPoint(x: first.frame.midX, y: first.frame.midY))
         }
-        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w, modifiers: .option))
+        header.mouseDown(with: mouseEvent(.leftMouseDown, start, w, modifiers: []))
         for k in 1...10 {
             let t = CGFloat(k) / 10
-            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w, modifiers: .option))
+            header.mouseDragged(with: mouseEvent(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t), w, modifiers: []))
         }
         header.mouseUp(with: mouseEvent(.leftMouseUp, end, w))
     }
@@ -244,6 +244,10 @@ extension AppDelegate {
 
     /// Regression through AppKit's hit testing and event dispatch, using only disposable test panes.
     func checkPaneDrag() {
+        Task { @MainActor in await checkPaneDragSequence() }
+    }
+
+    private func checkPaneDragSequence() async {
         guard let source = windowControllers.last, let window = source.window, source.panes.count == 2 else {
             preconditionFailure("Pane drag check needs two test panes")
         }
@@ -252,26 +256,171 @@ extension AppDelegate {
         let pid = pane.terminal.process.shellPid
         let dir = DebugHooks.env["ONYX_SNAPSHOT"] ?? ""
         let header = pane.header
-        let start = header.convert(CGPoint(x: 60, y: 10), to: nil)
+        func headerPoint() -> CGPoint { header.convert(CGPoint(x: 60, y: 10), to: nil) }
+        func send(_ type: NSEvent.EventType, _ point: CGPoint, in window: NSWindow) {
+            window.sendEvent(mouseEvent(type, point, window))
+        }
+        func pause() async { try? await Task.sleep(for: .milliseconds(350)) }
+        func alive() {
+            precondition(pane.terminal.process.running && pane.terminal.process.shellPid == pid,
+                         "Same running shell must survive every drag")
+        }
+        let start = headerPoint()
         let titlePoint = header.convert(CGPoint(x: 60, y: 10), to: pane)
         precondition(header.hitTest(titlePoint) === header, "Title must receive header drags")
         let closePoint = header.convert(CGPoint(x: header.bounds.maxX - 15, y: 10), to: pane)
         precondition(header.hitTest(closePoint) is NSButton, "Close button must still receive clicks")
-        window.sendEvent(mouseEvent(.leftMouseDown, start, window))
-        window.sendEvent(mouseEvent(.leftMouseUp, start, window))
+        send(.leftMouseDown, start, in: window)
+        send(.leftMouseUp, start, in: window)
         precondition(windowControllers.count == 1 && source.panes.count == 2, "Click must not detach")
-        window.sendEvent(mouseEvent(.leftMouseDown, start, window))
-        let end = CGPoint(x: start.x + 50, y: start.y - 80)
-        precondition(window.frame.contains(window.convertPoint(toScreen: end)), "Drop must stay inside original window")
-        window.sendEvent(mouseEvent(.leftMouseDragged, CGPoint(x: start.x + 10, y: start.y - 10), window))
-        window.sendEvent(mouseEvent(.leftMouseDragged, end, window))
-        window.sendEvent(mouseEvent(.leftMouseUp, end, window))
-        precondition(windowControllers.count == 2, "Drag inside original window must detach")
-        precondition(source.panes.count == 1 && source.panes[0] === other, "Other pane must stay put")
-        precondition(windowControllers.last?.panes.first === pane && pane.window !== window, "Same pane must move to new window")
-        precondition(pane.terminal.process.running && pane.terminal.process.shellPid == pid, "Shell must survive detaching")
-        pane.terminal.send(txt: "printf 'DETACHED_SHELL_ALIVE\\n'\n")
-        report(dir, "PASS: title drag routing, close button, click, detach inside window, same running shell pid=\(pid)")
+
+        // Normal dragging over another header reorders, without modifiers or a new window.
+        let destination = other.header.convert(CGPoint(x: 60, y: 10), to: nil)
+        send(.leftMouseDown, start, in: window)
+        send(.leftMouseDragged, destination, in: window)
+        send(.leftMouseUp, destination, in: window)
+        await pause()
+        precondition(source.panes[1] === pane && windowControllers.count == 1, "Header drag must reorder")
+        alive()
+
+        // Pull away, then return to the source strip before releasing.
+        var grab = headerPoint()
+        var away = CGPoint(x: grab.x + 40, y: grab.y - 90)
+        send(.leftMouseDown, grab, in: window)
+        send(.leftMouseDragged, away, in: window)
+        precondition(pane.alphaValue == 0, "Floating preview must replace source pane")
+        send(.leftMouseDragged, grab, in: window)
+        send(.leftMouseUp, grab, in: window)
+        await pause()
+        precondition(windowControllers.count == 1 && pane.alphaValue == 1, "Returning must restore source")
+
+        // Escape cancels a floating drag, including its insertion preview and cursor state.
+        grab = headerPoint()
+        away = CGPoint(x: grab.x + 40, y: grab.y - 90)
+        send(.leftMouseDown, grab, in: window)
+        send(.leftMouseDragged, away, in: window)
+        let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                      windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
+                                      charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!
+        NSApp.sendEvent(escape)
+        send(.leftMouseUp, away, in: window)
+        await pause()
+        precondition(windowControllers.count == 1 && pane.alphaValue == 1, "Escape must cancel detach")
+
+        // Pull vertically, still inside the source window (also works when maximized).
+        grab = headerPoint()
+        away = CGPoint(x: grab.x + 40, y: grab.y - 90)
+        send(.leftMouseDown, grab, in: window)
+        send(.leftMouseDragged, away, in: window)
+        precondition(window.frame.contains(window.convertPoint(toScreen: away)), "Drop stays inside source")
+        await pause()
+        snapshot(to: dir, step: 100)
+        for panel in NSApp.windows where panel is NSPanel && panel.isVisible {
+            if let view = panel.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir + "/floating.png"))
+            }
+        }
+        send(.leftMouseUp, away, in: window)
+        await pause()
+        precondition(windowControllers.count == 2, "Pulling away must detach")
+        precondition(source.panes.count == 1 && source.panes[0] === other, "Other pane stays in source")
+        guard let detached = windowControllers.last, let detachedWindow = detached.window else {
+            preconditionFailure("Detached window missing")
+        }
+        precondition(detached.panes.first === pane && pane.window !== window, "Live pane must move to new window")
+        alive()
+        snapshot(to: dir, step: 101)
+
+        // Drag the only pane back into the original window at the first insertion slot.
+        window.orderFront(nil)
+        let singleGrab = header.convert(CGPoint(x: 60, y: 10), to: nil)
+        let targetScreen = window.convertPoint(toScreen: source.grid.convert(
+            CGPoint(x: source.grid.bounds.minX + 80, y: source.grid.bounds.midY), to: nil))
+        let join = detachedWindow.convertPoint(fromScreen: targetScreen)
+        send(.leftMouseDown, singleGrab, in: detachedWindow)
+        send(.leftMouseDragged, join, in: detachedWindow)
+        precondition(source.grid.insertionIndex == 0, "Target must show first insertion slot")
+        precondition(detachedWindow.alphaValue == 0, "Single-pane source must not leave an empty duplicate")
+        await pause()
+        snapshot(to: dir, step: 102)
+        send(.leftMouseUp, join, in: detachedWindow)
+        await pause()
+        precondition(windowControllers.count == 1 && source.panes.count == 2, "Single pane must reattach and close empty window")
+        precondition(source.panes[0] === pane && source.grid.insertionIndex == nil, "Drop must honor insertion order and clear preview")
+        alive()
+
+        // Three-pane geometry: crossing content and returning onto a lower header reorders.
+        source.addPane()
+        await pause()
+        let third = source.panes[2]
+        let threeGrab = headerPoint()
+        let lowerHeader = other.header.convert(CGPoint(x: 60, y: 10), to: nil)
+        send(.leftMouseDown, threeGrab, in: window)
+        send(.leftMouseDragged, CGPoint(x: threeGrab.x, y: threeGrab.y - 80), in: window)
+        send(.leftMouseDragged, lowerHeader, in: window)
+        send(.leftMouseUp, lowerHeader, in: window)
+        await pause()
+        precondition(source.panes[1] === pane, "Three-pane header drag must reorder into lower row")
+        source.close(third)
+        await pause()
+
+        // Overlap picks the frontmost window. Escape restores the destination's original layout.
+        newWindow(nil)
+        guard let front = windowControllers.last, let frontWindow = front.window else {
+            preconditionFailure("Overlap target missing")
+        }
+        frontWindow.setFrame(window.frame, display: true)
+        let overlapPoint = window.convertPoint(toScreen: CGPoint(x: 100, y: 200))
+        precondition(updatePaneDrag(from: detached, at: overlapPoint) && front.grid.insertionIndex != nil
+                     && source.grid.insertionIndex == nil, "Frontmost eligible window must receive insertion")
+        finishPaneDrag()
+        frontWindow.orderOut(nil)
+        precondition(updatePaneDrag(from: detached, at: overlapPoint) && source.grid.insertionIndex != nil,
+                     "Hidden window must not receive insertion")
+        finishPaneDrag()
+        frontWindow.orderFront(nil)
+        let originalFrames = source.panes.map { $0.frame }
+        let frontPane = front.panes[0]
+        let frontGrab = frontPane.header.convert(CGPoint(x: 60, y: 10), to: nil)
+        window.orderFront(nil)
+        let hover = frontWindow.convertPoint(fromScreen: overlapPoint)
+        send(.leftMouseDown, frontGrab, in: frontWindow)
+        send(.leftMouseDragged, hover, in: frontWindow)
+        precondition(source.grid.insertionIndex != nil, "Hover must open an insertion slot")
+        NSApp.sendEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                        windowNumber: frontWindow.windowNumber, context: nil, characters: "\u{1b}",
+                                        charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!)
+        send(.leftMouseUp, hover, in: frontWindow)
+        await pause()
+        precondition(source.grid.insertionIndex == nil && source.panes.map { $0.frame } == originalFrames,
+                     "Escape must restore target layout")
+        precondition(frontWindow.alphaValue == 1, "Escape must restore single-pane source window")
+        // The source may cover its destination before it lifts. Restoring that source before
+        // choosing the drop target must not steal the drop from the window underneath.
+        frontWindow.orderFront(nil)
+        send(.leftMouseDown, frontGrab, in: frontWindow)
+        send(.leftMouseDragged, hover, in: frontWindow)
+        send(.leftMouseDragged, CGPoint(x: hover.x + 2, y: hover.y), in: frontWindow)
+        precondition(source.grid.insertionIndex != nil && frontWindow.alphaValue == 0,
+                     "Lifting a single-pane source must expose its destination")
+        send(.leftMouseUp, CGPoint(x: hover.x + 2, y: hover.y), in: frontWindow)
+        await pause()
+        precondition(windowControllers.count == 1 && source.panes.contains(frontPane),
+                     "Hidden source must not obscure destination during drop handoff")
+        source.close(frontPane)
+        alive()
+
+        // A full target rejects incoming panes.
+        for _ in 0..<4 { source.addPane() }
+        precondition(!updatePaneDrag(from: detached, at: targetScreen), "Full target must reject incoming pane")
+        finishPaneDrag()
+        for extra in source.panes.filter({ $0 !== pane && $0 !== other }) { source.close(extra) }
+        await pause()
+        alive()
+        pane.terminal.send(txt: "printf 'DRAG_SHELL_ALIVE\\n'\n")
+        report(dir, "PASS: click, header routing, normal reorder, floating return, Escape, inside-window detach, single-pane reattach, insertion order, three-pane geometry, stacking, hidden targets, destination cancellation, capacity, same running shell pid=\(pid)")
+        snapshot(to: dir, step: 103)
     }
 
     /// A trackpad-style scroll up over pane `index`.

@@ -11,7 +11,7 @@ import SwiftTerm
 final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     let terminal: OnyxTerminalView
     weak var delegate: PaneViewDelegate?
-    /// Dragging the header detaches the pane; Option-drag reorders it.
+    /// Header dragging rearranges panes, tears them off, or joins another window.
     var onHeaderDrag: ((PaneView, PaneHeader.DragPhase, NSEvent) -> Void)?
     let header = PaneHeader()
     private var closed = false
@@ -49,7 +49,7 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         terminal.subviews.compactMap { $0 as? NSScroller }.forEach { $0.isHidden = true }
 
         header.title = (cwd as NSString).abbreviatingWithTildeInPath
-        header.toolTip = "Drag to a separate window. Option-drag to rearrange terminals."
+        header.toolTip = "Drag onto a header to rearrange, away to detach, or into another Onyx window to attach."
         header.onClose = { [weak self] in self?.requestClose() }
         header.onClick = { [weak self] in self?.focus() }
         header.onDrag = { [weak self] phase, event in
@@ -407,28 +407,29 @@ final class PaneHeader: NSView {
 
     enum DragPhase { case began, moved, ended }
     var onDrag: ((DragPhase, NSEvent) -> Void)?
-    private var downAt: CGPoint?
+    private var downEvent: NSEvent?
     private var dragging = false
 
     override func mouseDown(with event: NSEvent) {
         onClick?()
-        downAt = event.locationInWindow
+        downEvent = event
         dragging = false
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let downAt else { return }
+        guard let downEvent else { return }
+        let downAt = downEvent.locationInWindow
         let p = event.locationInWindow
         if !dragging, hypot(p.x - downAt.x, p.y - downAt.y) > 4 {
             dragging = true
-            onDrag?(.began, event)
+            onDrag?(.began, downEvent)
         }
         if dragging { onDrag?(.moved, event) }
     }
 
     override func mouseUp(with event: NSEvent) {
         if dragging { onDrag?(.ended, event) }
-        downAt = nil
+        downEvent = nil
         dragging = false
     }
 

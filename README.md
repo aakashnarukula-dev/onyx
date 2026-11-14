@@ -26,12 +26,13 @@ On fresh launch, choose Claude Code or Codex (ChatGPT). The selected assistant s
 
 Layout follows the count: 1 full, 2 side by side, 3 = two stacked left + one right,
 4 = 2×2, 5 = 2+2+1, 6 = 3×2. Drag the gaps to resize; adding or closing re-flows.
-Drag a terminal by its header and release to give it a separate window, even while the original
-window fills the screen. The terminal and its running conversation keep going.
-Option-drag a terminal by its header onto another's place to move it there; the ones in between
-shift along (drop 3 on 1 in the three-pane layout and 1 moves down, 2 moves right).
-Option-drag a terminal out of the window and let go to give it a window of its own (or let go over
-another Onyx window with room to move it there); it keeps running throughout.
+Drag a terminal by its header, like a Chrome tab. Move across other headers to rearrange;
+neighboring terminals slide aside. Pull away from the headers to lift out a floating preview,
+even while the original window fills the screen. Release to detach, or drag into another Onyx
+window with room to attach. An orange insertion preview shows where it will land, and the
+floating pane animates into that slot on release. A single-terminal window can reattach too;
+its empty window closes. Drag back over the original headers to return, or press Escape to
+cancel. No modifier key is needed. The terminal and its running conversation keep going.
 
 ![Three terminals: two stacked on the left, one on the right](docs/screenshots/three-terminals.png)
 

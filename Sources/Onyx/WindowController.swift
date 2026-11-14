@@ -31,7 +31,10 @@ final class TopBar: NSView {
 @MainActor protocol WindowControllerDelegate: AnyObject {
     func makePane(for controller: WindowController, restoring: SessionState.Pane?, assistant: Assistant?) -> PaneView
     func windowControllerDidClose(_ controller: WindowController)
-    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint, intoNewWindow: Bool)
+    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint)
+    func updatePaneDrag(from source: WindowController, at point: NSPoint) -> Bool
+    func finishPaneDrag()
+    func paneDropFrame(for pane: PaneView, from source: WindowController, at point: NSPoint) -> NSRect?
 }
 
 /// One Onyx window holding up to `GridLayout.maxPanes` independent terminals.
@@ -68,9 +71,18 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
         window.contentView = content
         content.addSubview(grid)
         grid.onReorder = { [weak self] order in self?.panes = order }
-        grid.onTearOff = { [weak self] pane, point, intoNewWindow in
+        grid.onTearOff = { [weak self] pane, point in
             guard let self else { return }
-            self.host?.movePane(pane, from: self, toScreenPoint: point, intoNewWindow: intoNewWindow)
+            self.host?.movePane(pane, from: self, toScreenPoint: point)
+        }
+        grid.onDragLocation = { [weak self] point in
+            guard let self else { return false }
+            return self.host?.updatePaneDrag(from: self, at: point) ?? false
+        }
+        grid.onDragFinished = { [weak self] in self?.host?.finishPaneDrag() }
+        grid.onDropFrame = { [weak self] pane, point in
+            guard let self else { return nil }
+            return self.host?.paneDropFrame(for: pane, from: self, at: point)
         }
         content.addSubview(topBar)
 
@@ -149,7 +161,7 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
         panes.remove(at: i)
         if focused === pane { focused = nil }
         pane.isFocused = false
-        grid.setPanes(panes)
+        grid.setPanes(panes, animated: true)
         updateCount()
         if panes.isEmpty {
             window?.close()
@@ -159,11 +171,11 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
     }
 
     /// Takes in a running pane from another window.
-    func adopt(_ pane: PaneView) {
+    func adopt(_ pane: PaneView, at index: Int? = nil) {
         guard canAddPane else { return }
         pane.delegate = self
-        panes.append(pane)
-        grid.setPanes(panes)
+        panes.insert(pane, at: min(max(index ?? panes.count, 0), panes.count))
+        grid.setPanes(panes, animated: true)
         updateCount()
         grid.layoutSubtreeIfNeeded()
         pane.focus()

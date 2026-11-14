@@ -247,31 +247,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         saveSession()  // a window closed on purpose doesn't come back
     }
 
-    /// A normal header drag creates a new window. Option-drag can join another window with room.
-    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint, intoNewWindow: Bool) {
-        let target = intoNewWindow ? nil : controllers.first { $0 !== source && $0.canAddPane && ($0.window?.frame.contains(point) ?? false) }
-        let size = CGSize(width: max(pane.frame.width + Theme.margin * 2, 640),
-                          height: max(pane.frame.height + Theme.topBarHeight + Theme.margin * 2, 400))
-        source.detach(pane)
-        if let target {
-            target.adopt(pane)
-            target.window?.makeKeyAndOrderFront(nil)
-            return
+    /// Respect stacking order: a full window or the source blocks windows underneath it.
+    private func paneDropTarget(from source: WindowController, at point: NSPoint) -> WindowController? {
+        for window in NSApp.orderedWindows where window.isVisible && !window.isMiniaturized
+            && window.alphaValue > 0 && window.isOnActiveSpace && window.frame.contains(point) {
+            guard let controller = controllers.first(where: { $0.window === window }) else { continue }
+            return controller !== source && controller.canAddPane ? controller : nil
         }
-        // The new window's top bar sits under the cursor, kept on the screen it was let go on.
+        return nil
+    }
+
+    func updatePaneDrag(from source: WindowController, at point: NSPoint) -> Bool {
+        let target = paneDropTarget(from: source, at: point)
+        for controller in controllers where controller !== target { controller.grid.clearInsertion() }
+        guard let target, let window = target.window else { return false }
+        let local = target.grid.convert(window.convertPoint(fromScreen: point), from: nil)
+        _ = target.grid.showInsertion(at: local)
+        return true
+    }
+
+    func finishPaneDrag() { controllers.forEach { $0.grid.clearInsertion() } }
+
+    func paneDropFrame(for pane: PaneView, from source: WindowController, at point: NSPoint) -> NSRect? {
+        if let target = paneDropTarget(from: source, at: point), let window = target.window {
+            let local = target.grid.convert(window.convertPoint(fromScreen: point), from: nil)
+            let frame = target.grid.showInsertion(at: local)
+            return window.convertToScreen(target.grid.convert(frame, to: nil))
+        }
+        var frame = detachedWindowFrame(for: pane, from: source, at: point).insetBy(dx: Theme.margin, dy: Theme.margin)
+        frame.size.height -= Theme.topBarHeight
+        return frame
+    }
+
+    private func detachedWindowFrame(for pane: PaneView, from source: WindowController, at point: NSPoint) -> NSRect {
+        let style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        let contentSize = CGSize(width: max(pane.frame.width + Theme.margin * 2, 640),
+                                 height: max(pane.frame.height + Theme.topBarHeight + Theme.margin * 2, 400))
+        let size = source.panes.count == 1 && source.window?.styleMask.contains(.fullScreen) != true
+            ? source.window?.frame.size ?? contentSize
+            : NSWindow.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize), styleMask: style).size
         var frame = NSRect(x: point.x - size.width / 2, y: point.y - size.height + Theme.topBarHeight / 2,
                            width: size.width, height: size.height)
         if let screen = (NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main)?.visibleFrame {
+            frame.size.width = min(frame.width, screen.width)
+            frame.size.height = min(frame.height, screen.height)
             frame.origin.x = min(max(frame.minX, screen.minX), screen.maxX - frame.width)
             frame.origin.y = min(max(frame.minY, screen.minY), screen.maxY - frame.height)
         }
-        let c = WindowController(owner: self, frame: frame)
-        if source.window?.styleMask.contains(.fullScreen) == true {
+        return frame
+    }
+
+    /// Move the live view, not its process. A one-pane source closes without stopping its pane.
+    func movePane(_ pane: PaneView, from source: WindowController, toScreenPoint point: NSPoint) {
+        guard source.panes.contains(pane) else { return }
+        let target = paneDropTarget(from: source, at: point)
+        if let target {
+            if let window = target.window {
+                _ = target.grid.showInsertion(at: target.grid.convert(window.convertPoint(fromScreen: point), from: nil))
+            }
+            let index = target.grid.insertionIndex
+            source.detach(pane)
+            target.grid.clearInsertion(restoring: false)
+            target.adopt(pane, at: index)
+            finishPaneDrag()
+            target.window?.makeKeyAndOrderFront(nil)
+            saveSession()
+            return
+        }
+        finishPaneDrag()
+        let frame = detachedWindowFrame(for: pane, from: source, at: point)
+        // Pulling the only pane moves its existing window instead of destroying and recreating it.
+        if source.panes.count == 1, source.window?.styleMask.contains(.fullScreen) != true {
+            source.window?.setFrame(frame, display: true)
+            source.window?.makeKeyAndOrderFront(nil)
+            pane.focus()
+            saveSession()
+            return
+        }
+        let fullScreen = source.window?.styleMask.contains(.fullScreen) == true
+        let style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        let c = WindowController(owner: self, frame: NSWindow.contentRect(forFrameRect: frame, styleMask: style))
+        if fullScreen {
             c.window?.collectionBehavior.insert(.fullScreenAuxiliary)
         }
         controllers.append(c)
         c.showWindow(nil)
+        source.detach(pane)
         c.adopt(pane)
+        saveSession()
     }
 
     private var developerDir: String { NSHomeDirectory() + "/Developer" }
