@@ -4,7 +4,7 @@ import OnyxCore
 /// Test hooks, inert unless their env vars are set:
 /// - `ONYX_PANE_COMMAND`: run this instead of Claude in every pane.
 /// - `ONYX_SNAPSHOT=<dir>` + `ONYX_SCRIPT="n n n w2 s"`: after launch run the steps
-///   (`n` new pane, `p`/`P` wait 0.8 s/10 s, `t<i>` type $ONYX_TYPE_<i> into pane i, `w<i>` close pane i of the last window, `s` snapshot every window to
+///   (`n` new pane, `N` press ⌘⇧N, `p`/`P` wait 0.8 s/10 s, `t<i>` type $ONYX_TYPE_<i> into pane i, `w<i>` close pane i of the last window, `s` snapshot every window to
 ///   `<dir>/<step>-<window>.png`), then quit.
 @MainActor
 enum DebugHooks {
@@ -23,6 +23,16 @@ enum DebugHooks {
             i += 1
             switch step.first {
             case "n": app.newPane(nil)
+            case "N":
+                if let event = NSEvent.keyEvent(with: .keyDown, location: .zero,
+                                               modifierFlags: [.command, .shift], timestamp: 0,
+                                               windowNumber: app.windowControllers.last?.window?.windowNumber ?? 0,
+                                               context: nil, characters: "N", charactersIgnoringModifiers: "N",
+                                               isARepeat: false, keyCode: 45) {
+                    let handled = NSApp.mainMenu?.performKeyEquivalent(with: event) == true
+                    let shellOnly = app.windowControllers.last?.panes.last?.assistant == nil
+                    app.report(dir, "shell shortcut: handled=\(handled), plainShell=\(shellOnly), windows=\(app.windowControllers.count)")
+                }
             case "a": app.newClaudePane(nil)
             case "b": app.newCodexPane(nil)
             case "w": if let k = Int(step.dropFirst()) { app.closePane(at: k) }
@@ -351,7 +361,7 @@ extension AppDelegate {
         alive()
 
         // Three-pane geometry: crossing content and returning onto a lower header reorders.
-        source.addPane()
+        source.addPane(assistant: settings.assistant)
         await pause()
         let third = source.panes[2]
         let threeGrab = headerPoint()
@@ -412,7 +422,7 @@ extension AppDelegate {
         alive()
 
         // A full target rejects incoming panes.
-        for _ in 0..<4 { source.addPane() }
+        for _ in 0..<4 { source.addPane(assistant: settings.assistant) }
         precondition(!updatePaneDrag(from: detached, at: targetScreen), "Full target must reject incoming pane")
         finishPaneDrag()
         for extra in source.panes.filter({ $0 !== pane && $0 !== other }) { source.close(extra) }

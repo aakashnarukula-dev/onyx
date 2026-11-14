@@ -102,7 +102,8 @@ struct AssistantSessionTests {
     @Test func mixedProvidersRoundTrip() throws {
         let state = SessionState(windows: [.init(frame: [0, 0, 800, 600], panes: [
             .init(cwd: "/tmp", claudeSession: nil, assistant: .claude),
-            .init(cwd: "/tmp", claudeSession: nil, assistant: .codex)
+            .init(cwd: "/tmp", claudeSession: nil, assistant: .codex),
+            .init(cwd: "/tmp", claudeSession: nil, assistant: nil)
         ])])
         let data = try JSONEncoder().encode(state)
         #expect(try JSONDecoder().decode(SessionState.self, from: data) == state)
@@ -111,7 +112,7 @@ struct AssistantSessionTests {
     @Test func legacyPaneStillLoads() throws {
         let data = Data(#"{"cwd":"/tmp"}"#.utf8)
         let pane = try JSONDecoder().decode(SessionState.Pane.self, from: data)
-        #expect(pane.assistant == nil)
+        #expect(pane.assistant == .claude)
         #expect(pane.claudeSession == nil)
     }
 }

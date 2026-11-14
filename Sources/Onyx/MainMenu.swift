@@ -24,7 +24,7 @@ enum MainMenu {
             choice.tag = index
             assistants.addItem(choice)
         }
-        shell.addItem(item("New Window", #selector(AppDelegate.newWindow(_:)), "n", [.command, .shift]))
+        shell.addItem(item("New Shell Window", #selector(AppDelegate.newShellWindow(_:)), "N", [.command, .shift]))
         shell.addItem(.separator())
         shell.addItem(item("Close Terminal", #selector(AppDelegate.closePane(_:)), "w"))
 

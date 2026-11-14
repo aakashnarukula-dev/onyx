@@ -9,10 +9,28 @@ public struct SessionState: Codable, Equatable, Sendable {
         public var claudeSession: String?
         public var assistant: Assistant?
 
-        public init(cwd: String, claudeSession: String?, assistant: Assistant? = nil) {
+        public init(cwd: String, claudeSession: String?, assistant: Assistant? = .claude) {
             self.cwd = cwd
             self.claudeSession = claudeSession
             self.assistant = assistant
+        }
+
+        private enum CodingKeys: String, CodingKey { case cwd, claudeSession, assistant }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            cwd = try values.decode(String.self, forKey: .cwd)
+            claudeSession = try values.decodeIfPresent(String.self, forKey: .claudeSession)
+            // Old sessions omitted this key for Claude; explicit null now means a plain shell.
+            assistant = values.contains(.assistant)
+                ? try values.decodeIfPresent(Assistant.self, forKey: .assistant) : .claude
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var values = encoder.container(keyedBy: CodingKeys.self)
+            try values.encode(cwd, forKey: .cwd)
+            try values.encodeIfPresent(claudeSession, forKey: .claudeSession)
+            try values.encode(assistant, forKey: .assistant)
         }
     }
 

@@ -131,7 +131,7 @@ final class WindowController: NSWindowController, NSWindowDelegate, PaneViewDele
     // MARK: Panes
 
     /// Adds a terminal; `restoring` reopens one saved from a previous run.
-    func addPane(restoring: SessionState.Pane? = nil, assistant: Assistant? = nil) {
+    func addPane(restoring: SessionState.Pane? = nil, assistant: Assistant?) {
         guard canAddPane, let host else { return }
         let pane = host.makePane(for: self, restoring: restoring, assistant: assistant)
         pane.delegate = self

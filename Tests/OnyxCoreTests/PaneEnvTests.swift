@@ -51,6 +51,15 @@ struct PaneEnvTests {
         #expect(l.env["ZDOTDIR"] == nil)
     }
 
+    @Test func plainShellStartsWithoutAssistantOrCommandWrapper() {
+        for shell in ["/bin/zsh", "/bin/bash", "/usr/local/bin/fish"] {
+            let launch = PaneEnv.launch(shell: shell, firstCommand: "", zdotdir: "/z", userZdotdir: "/user")
+            #expect(launch.args.isEmpty)
+            #expect(launch.execName == "-" + URL(fileURLWithPath: shell).lastPathComponent)
+            #expect(launch.env.isEmpty)
+        }
+    }
+
     @Test func zshIntegrationRestoresUserSetupAndRunsCommandOnce() throws {
         let s = ZshIntegration.zshenv
         #expect(s.contains(#"ZDOTDIR="$ONYX_USER_ZDOTDIR""#))

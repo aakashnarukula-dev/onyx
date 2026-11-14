@@ -145,7 +145,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         openWindow(assistant: assistant)
     }
 
-    private func openWindow(assistant: Assistant) {
+    @objc func newShellWindow(_ sender: Any?) {
+        openWindow(assistant: nil)
+    }
+
+    private func openWindow(assistant: Assistant?) {
         let frame: NSRect
         if let last = current?.window?.frame {
             frame = last.offsetBy(dx: 28, dy: -28)
@@ -202,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         controllers.append(c)
         c.showWindow(nil)
         let panes = saved.panes.isEmpty ? [nil] : saved.panes.prefix(GridLayout.maxPanes).map { Optional($0) }
-        panes.forEach { c.addPane(restoring: $0) }
+        panes.forEach { c.addPane(restoring: $0, assistant: settings.assistant) }
     }
 
     func saveSession() {
@@ -216,8 +220,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
 
     func makePane(for controller: WindowController, restoring: SessionState.Pane?, assistant: Assistant?) -> PaneView {
         var cwd = FileManager.default.fileExists(atPath: developerDir) ? developerDir : NSHomeDirectory()
-        let selected = restoring.map { $0.assistant ?? .claude } ?? assistant ?? settings.assistant
-        var command = selected.command
+        // nil explicitly means a plain shell, including when restoring a saved pane.
+        let selected: Assistant? = restoring != nil ? restoring?.assistant : assistant
+        var command = selected?.command ?? ""
         var resuming: SessionState.Pane?
         if let restoring {
             var isDir: ObjCBool = false

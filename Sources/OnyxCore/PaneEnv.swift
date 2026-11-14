@@ -46,6 +46,9 @@ public enum PaneEnv {
     /// command through `-c` and then become an interactive shell.
     public static func launch(shell: String, firstCommand: String, zdotdir: String, userZdotdir: String?) -> Launch {
         let name = (shell as NSString).lastPathComponent
+        guard !firstCommand.isEmpty else {
+            return Launch(args: [], execName: "-" + name, env: [:])
+        }
         if name == "zsh" {
             var env = ["ZDOTDIR": zdotdir, "ONYX_FIRST_COMMAND": firstCommand]
             if let userZdotdir { env["ONYX_USER_ZDOTDIR"] = userZdotdir }

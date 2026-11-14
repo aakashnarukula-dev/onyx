@@ -193,7 +193,7 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     }
 
     /// The saved conversation this pane was reopened to resume, until Claude is seen running.
-    var assistant: Assistant = .claude
+    var assistant: Assistant? = .claude
     var resuming: SessionState.Pane?
 
     /// Claude's own records of its sessions, shared by every pane.
