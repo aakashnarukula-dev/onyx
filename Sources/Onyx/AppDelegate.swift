@@ -130,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         addPane(assistant: assistant)
     }
 
-    private func addPane(assistant: Assistant) {
+    private func addPane(assistant: Assistant?) {
         let t0 = ProcessInfo.processInfo.systemUptime
         if let c = current, c.canAddPane {
             c.addPane(assistant: assistant)
@@ -145,8 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         openWindow(assistant: assistant)
     }
 
-    @objc func newShellWindow(_ sender: Any?) {
-        openWindow(assistant: nil)
+    @objc func newShellPane(_ sender: Any?) {
+        addPane(assistant: nil)
     }
 
     private func openWindow(assistant: Assistant?) {

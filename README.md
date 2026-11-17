@@ -14,7 +14,7 @@ On fresh launch, choose Claude Code or Codex (ChatGPT). The selected assistant s
 | `⌘N` / `+` | New terminal (the 7th opens a new window) |
 | `⌘⌥N` | New Claude terminal |
 | `⌘⌃N` | New Codex terminal (ChatGPT) |
-| `⌘⇧N` | New window with a plain shell (no assistant) |
+| `⌘⇧N` | New plain shell terminal (the 7th opens a new window; no assistant) |
 | `⌘W` | Close terminal (asks first if it holds a Claude conversation or something is working) |
 | `⌘K` | Clear |
 | `⌘C` / `⌘V` | Copy / paste |
@@ -52,8 +52,9 @@ started yourself, or one after `/clear`, is followed too. A conversation with no
 starts fresh, and if none had messages Onyx doesn't ask and just opens one terminal; programs other than Claude (dev servers, ssh) don't come back; a window you
 close on purpose doesn't come back.
 
-Fresh launches, `⌘N`, and `+` show an assistant picker. `⌘⇧N` always opens a new
-window with your login shell, without starting Claude or Codex or showing the picker. Check
+Fresh launches, `⌘N`, and `+` show an assistant picker. `⌘⇧N` adds your login shell
+to the current window, opening a new window only when it already holds six terminals,
+without starting Claude or Codex or showing the picker. Check
 **Use this assistant automatically next time** to skip the picker for future terminals.
 Turn **Shell > Ask When Opening a Terminal** back on to show it again.
 **Shell > Default Assistant > Claude / Codex (ChatGPT)** sets the assistant used when the picker is off. Use **Shell > New Claude Terminal** or

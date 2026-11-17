@@ -31,7 +31,8 @@ enum DebugHooks {
                                                isARepeat: false, keyCode: 45) {
                     let handled = NSApp.mainMenu?.performKeyEquivalent(with: event) == true
                     let shellOnly = app.windowControllers.last?.panes.last?.assistant == nil
-                    app.report(dir, "shell shortcut: handled=\(handled), plainShell=\(shellOnly), windows=\(app.windowControllers.count)")
+                    let paneCounts = app.windowControllers.map { String($0.panes.count) }.joined(separator: ",")
+                    app.report(dir, "shell shortcut: handled=\(handled), plainShell=\(shellOnly), windows=\(app.windowControllers.count), panes=\(paneCounts)")
                 }
             case "a": app.newClaudePane(nil)
             case "b": app.newCodexPane(nil)
