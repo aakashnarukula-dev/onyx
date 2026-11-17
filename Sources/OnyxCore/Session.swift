@@ -37,10 +37,12 @@ public struct SessionState: Codable, Equatable, Sendable {
     public struct Window: Codable, Equatable, Sendable {
         public var frame: [Double]  // x, y, width, height
         public var panes: [Pane]
+        public var columns: [Int]?
 
-        public init(frame: [Double], panes: [Pane]) {
+        public init(frame: [Double], panes: [Pane], columns: [Int]? = nil) {
             self.frame = frame
             self.panes = panes
+            self.columns = columns
         }
     }
 

@@ -59,6 +59,38 @@ public enum GridLayout {
         frames.firstIndex { $0.contains(point) }
     }
 
+    public enum DropEdge { case center, above, below }
+
+    public struct PaneDrop: Equatable {
+        public var order: [Int]
+        public var columns: [Int]
+    }
+
+    /// Center drops exchange places. Edge drops move into the target column, keeping
+    /// at most two rows per column. Indices always refer to the layout before the drag.
+    public static func dropping(from: Int, onto target: Int, edge: DropEdge, columns: [Int]) -> PaneDrop {
+        let count = columns.reduce(0, +)
+        var result = PaneDrop(order: Array(0..<count), columns: columns)
+        guard result.order.indices.contains(from), result.order.indices.contains(target), from != target,
+              columns.allSatisfy({ (1...2).contains($0) }) else { return result }
+        if edge != .center {
+            var groups: [[Int]] = []
+            var start = 0
+            for rows in columns {
+                groups.append(Array(start..<(start + rows)).filter { $0 != from })
+                start += rows
+            }
+            groups.removeAll { $0.isEmpty }
+            if let column = groups.firstIndex(where: { $0.contains(target) }), groups[column].count < 2,
+               let row = groups[column].firstIndex(of: target) {
+                groups[column].insert(from, at: row + (edge == .below ? 1 : 0))
+                return PaneDrop(order: groups.flatMap { $0 }, columns: groups.map(\.count))
+            }
+        }
+        result.order.swapAt(from, target)
+        return result
+    }
+
     /// Moves divider `divider` (between item `divider` and `divider + 1`) by `delta` points,
     /// keeping both neighbours at least `min` points of `total`.
     public static func drag(fractions: [CGFloat], divider: Int, by delta: CGFloat,

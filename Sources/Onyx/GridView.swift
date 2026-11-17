@@ -23,7 +23,8 @@ final class GridView: NSView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    private var columns: [Int] { GridLayout.columns(for: panes.count) }
+    private(set) var columnCounts: [Int] = []
+    private var columns: [Int] { columnCounts }
 
     /// Called with the new pane order after the user drags a pane to another place.
     var onReorder: (([PaneView]) -> Void)?
@@ -57,10 +58,22 @@ final class GridView: NSView {
     /// Resets all dividers to equal sizes (after a pane is added or closed).
     func reflow() {
         drag = nil  // a pane closing mid-drag must not leave a divider index into the old layout
+        columnCounts = GridLayout.columns(for: panes.count)
         let cols = columns
         widths = Array(repeating: 1 / CGFloat(max(cols.count, 1)), count: cols.count)
         heights = cols.map { Array(repeating: 1 / CGFloat($0), count: $0) }
         needsLayout = true
+        window?.invalidateCursorRects(for: self)
+    }
+
+    func restoreColumns(_ saved: [Int]?) {
+        guard let saved, !saved.isEmpty, saved.reduce(0, +) == panes.count,
+              saved.allSatisfy({ (1...2).contains($0) }) else { return }
+        columnCounts = saved
+        widths = Array(repeating: 1 / CGFloat(saved.count), count: saved.count)
+        heights = saved.map { Array(repeating: 1 / CGFloat($0), count: $0) }
+        needsLayout = true
+        layoutSubtreeIfNeeded()
         window?.invalidateCursorRects(for: self)
     }
 
@@ -158,7 +171,7 @@ final class GridView: NSView {
     private struct Move {
         let pane: PaneView
         let from: Int
-        var to: Int
+        var plan: GridLayout.PaneDrop
         let slots: [CGRect]
         let grab: CGPoint  // cursor offset inside the dragged pane
         let placeholder: NSView
@@ -186,6 +199,7 @@ final class GridView: NSView {
         case .began: beginMove(pane, at: p)
         case .moved: updateMove(to: p)
         case .ended:
+            updateMove(to: p)
             if let w = window, let m = move, m.floating, !m.dropping {
                 let screen = w.convertPoint(toScreen: event.locationInWindow)
                 move?.dropping = true
@@ -218,13 +232,16 @@ final class GridView: NSView {
         placeholder.layer?.borderColor = Theme.accent.withAlphaComponent(0.6).cgColor
         placeholder.layer?.backgroundColor = Theme.accent.withAlphaComponent(0.05).cgColor
         addSubview(placeholder, positioned: .below, relativeTo: nil)
-        addSubview(pane, positioned: .above, relativeTo: nil)  // ride above the others
-        pane.layer?.shadowColor = NSColor.black.cgColor
-        pane.layer?.shadowOpacity = 0.7
-        pane.layer?.shadowRadius = 16
-        pane.alphaValue = 0.94
+        // Capture once. The preview follows the pointer without resizing a live PTY
+        // or taking a fresh terminal snapshot on every boundary crossing.
+        if let window {
+            preview = PaneDragPreview(pane: pane, screenFrame: window.convertToScreen(convert(pane.frame, to: nil)))
+        }
+        pane.alphaValue = 0
         moveCount += 1
-        move = Move(pane: pane, from: from, to: from, slots: panes.map(\.frame),
+        move = Move(pane: pane, from: from,
+                    plan: GridLayout.dropping(from: from, onto: from, edge: .center, columns: columns),
+                    slots: panes.map(\.frame),
                     grab: CGPoint(x: p.x - pane.frame.minX, y: p.y - pane.frame.minY), placeholder: placeholder,
                     token: moveCount, windowAlpha: window?.alphaValue ?? 1)
         NSCursor.closedHand.push()
@@ -239,17 +256,11 @@ final class GridView: NSView {
         guard var m = move, !m.dropping, let window else { return }
         let screen = window.convertPoint(toScreen: convert(p, to: nil))
         let joining = onDragLocation?(screen) ?? false
-        // Like a tab strip, the original headers are the rearranging / return zone.
-        // Pulling away vertically also tears off in a maximized or full-screen window.
-        let headerSlots = m.slots.indices.filter { index in
-            let slot = m.slots[index]
-            return CGRect(x: slot.minX, y: slot.maxY - Theme.headerHeight,
-                          width: slot.width, height: Theme.headerHeight).insetBy(dx: -8, dy: -18).contains(p)
-        }
-        if joining || headerSlots.isEmpty {
+        // Whole source grid accepts local drops. Only leaving it tears a pane off.
+        // Use the original slots for hit testing so animated neighbors cannot move
+        // the target out from under a stationary pointer and cause oscillation.
+        if joining || !bounds.contains(p) {
             if !m.floating {
-                preview = PaneDragPreview(pane: m.pane, screenFrame: window.convertToScreen(convert(m.pane.frame, to: nil)))
-                m.pane.alphaValue = 0
                 m.placeholder.alphaValue = 0
                 // A window losing its only pane travels as the preview, without an empty duplicate.
                 if panes.count == 1 { window.alphaValue = 0 }
@@ -264,62 +275,70 @@ final class GridView: NSView {
         }
         let returning = m.floating
         if returning {
-            preview?.close()
-            preview = nil
             m.floating = false
-            m.pane.alphaValue = 0.94
             m.placeholder.alphaValue = 1
             window.alphaValue = m.windowAlpha
-            move = m
         }
-        // Moving (not resizing) the dragged terminal: nothing is redrawn, the program sees no resize.
-        m.pane.setFrameOrigin(CGPoint(x: p.x - m.grab.x, y: p.y - m.grab.y))
-        let to = headerSlots.min {
-            hypot(m.slots[$0].midX - p.x, m.slots[$0].maxY - p.y) < hypot(m.slots[$1].midX - p.x, m.slots[$1].maxY - p.y)
+        preview?.follow(screen, grab: m.grab, joining: true)
+        let target = GridLayout.slot(at: p, in: m.slots) ?? m.slots.indices.min {
+            hypot(m.slots[$0].midX - p.x, m.slots[$0].midY - p.y) < hypot(m.slots[$1].midX - p.x, m.slots[$1].midY - p.y)
         } ?? m.from
-        guard to != m.to || returning else { return }
-        m.to = to
+        let slot = m.slots[target]
+        var edge: GridLayout.DropEdge = .center
+        // Headers always exchange panes. Lower/upper content edges split vertically.
+        if p.y < slot.minY + slot.height * 0.25 { edge = .below }
+        else if p.y > slot.maxY - slot.height * 0.25 && p.y < slot.maxY - Theme.headerHeight { edge = .above }
+        var plan = GridLayout.dropping(from: m.from, onto: target, edge: edge, columns: columns)
+        var frames = moveFrames(for: plan)
+        if frames.contains(where: { $0.height < Theme.minPane.height }) {
+            plan = GridLayout.dropping(from: m.from, onto: target, edge: .center, columns: columns)
+            frames = moveFrames(for: plan)
+        }
+        guard plan != m.plan || returning else { move = m; return }
+        m.plan = plan
         move = m
-        let order = GridLayout.moving(panes, from: m.from, to: to)
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.22
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            ctx.allowsImplicitAnimation = true
-            for (i, pane) in order.enumerated() {
-                let slot = m.slots[i]
-                if pane === m.pane { m.placeholder.animator().frame = slot; continue }
-                // Take the new size at once (one resize for the program), then glide into place.
-                if pane.frame.size != slot.size { pane.setFrameSize(slot.size) }
-                pane.animator().setFrameOrigin(slot.origin)
+            ctx.duration = 0.12
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            for (i, original) in plan.order.enumerated() {
+                let pane = panes[original]
+                let frame = frames[i]
+                if pane === m.pane { m.placeholder.animator().frame = frame; continue }
+                if pane.frame.size != frame.size { pane.setFrameSize(frame.size) }
+                pane.animator().setFrameOrigin(frame.origin)
             }
         }
     }
 
+    private func moveFrames(for plan: GridLayout.PaneDrop) -> [CGRect] {
+        let sameColumns = plan.columns.count == columns.count
+        let rowHeights = plan.columns.enumerated().map { c, rows in
+            sameColumns && rows == columns[c] ? heights[c] : Array(repeating: 1 / CGFloat(rows), count: rows)
+        }
+        return GridLayout.frames(columns: plan.columns, widths: sameColumns ? widths : nil,
+                                 heights: rowHeights, in: area, gap: Theme.gap)
+    }
+
     private func endMove() {
-        guard var m = move, !m.dropping else { return }
-        m.dropping = true
-        move = m
-        let order = GridLayout.moving(panes, from: m.from, to: m.to)
-        let slot = m.slots[m.to]
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.16
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            if m.pane.frame.size != slot.size { m.pane.setFrameSize(slot.size) }
-            m.pane.animator().setFrameOrigin(slot.origin)
-            m.pane.animator().alphaValue = 1
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, self.move?.token == m.token else { return }  // not cancelled meanwhile
-                self.cancelMove()
-                // Same count, so the divider sizes stay with their places; panes take the size of their new place.
-                self.panes = order
-                self.needsLayout = true
-                self.layoutSubtreeIfNeeded()
-                self.window?.invalidateCursorRects(for: self)
-                self.onReorder?(order)
-                m.pane.focus()
-            }
-        })
+        guard let m = move, !m.dropping else { return }
+        let frames = moveFrames(for: m.plan)
+        let order = m.plan.order.map { panes[$0] }
+        let sameColumns = m.plan.columns.count == columns.count
+        let rowHeights = m.plan.columns.enumerated().map { c, rows in
+            sameColumns && rows == columns[c] ? heights[c] : Array(repeating: 1 / CGFloat(rows), count: rows)
+        }
+        cancelMove()
+        panes = order
+        columnCounts = m.plan.columns
+        if !sameColumns { widths = Array(repeating: 1 / CGFloat(columns.count), count: columns.count) }
+        heights = rowHeights
+        // Commit immediately, so the very next mouse down can start another drag.
+        for (pane, frame) in zip(panes, frames) { pane.frame = frame }
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        window?.invalidateCursorRects(for: self)
+        onReorder?(order)
+        m.pane.focus()
     }
 
     /// Ends a drag: the dragged pane's lift goes away and the grid lays out its current order.

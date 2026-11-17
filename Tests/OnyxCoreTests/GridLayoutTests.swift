@@ -54,6 +54,45 @@ struct DividerDragTests {
 }
 
 struct PaneMoveTests {
+    @Test func centerDropExchangesLeftAndRightPanes() {
+        let drop = GridLayout.dropping(from: 0, onto: 2, edge: .center, columns: [2, 1])
+        #expect(drop.order == [2, 1, 0])
+        #expect(drop.columns == [2, 1])
+    }
+
+    @Test func bottomDropMovesStackToRightColumn() {
+        for from in 0...1 {
+            let drop = GridLayout.dropping(from: from, onto: 2, edge: .below, columns: [2, 1])
+            #expect(drop.order == [1 - from, 2, from])
+            #expect(drop.columns == [1, 2])
+        }
+    }
+
+    @Test func topDropAndReverseSplit() {
+        let top = GridLayout.dropping(from: 1, onto: 2, edge: .above, columns: [2, 1])
+        #expect(top.order == [0, 1, 2] && top.columns == [1, 2])
+        let left = GridLayout.dropping(from: 2, onto: 0, edge: .below, columns: [1, 2])
+        #expect(left.order == [0, 2, 1] && left.columns == [2, 1])
+        let vertical = GridLayout.dropping(from: 0, onto: 1, edge: .below, columns: [1, 1])
+        #expect(vertical.order == [1, 0] && vertical.columns == [2])
+    }
+
+    @Test func everyDropKeepsAllPanesAndAtMostTwoRows() {
+        for columns in [[1], [1, 1], [2], [2, 1], [1, 2], [2, 2], [2, 2, 1], [2, 2, 2]] {
+            let count = columns.reduce(0, +)
+            for from in 0..<count {
+                for target in 0..<count {
+                    for edge: GridLayout.DropEdge in [.center, .above, .below] {
+                        let drop = GridLayout.dropping(from: from, onto: target, edge: edge, columns: columns)
+                        #expect(drop.order.sorted() == Array(0..<count))
+                        #expect(drop.columns.reduce(0, +) == count)
+                        #expect(drop.columns.allSatisfy { (1...2).contains($0) })
+                    }
+                }
+            }
+        }
+    }
+
     @Test func movingLastToFirstShiftsTheOthersOn() {
         // Three panes: 1 and 2 stacked left, 3 right. Drop 3 on 1's place: 1 moves down, 2 goes right.
         #expect(GridLayout.moving([1, 2, 3], from: 2, to: 0) == [3, 1, 2])

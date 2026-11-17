@@ -294,9 +294,9 @@ extension AppDelegate {
         precondition(source.panes[1] === pane && windowControllers.count == 1, "Header drag must reorder")
         alive()
 
-        // Pull away, then return to the source strip before releasing.
+        // Pull outside the grid, then return before releasing.
         var grab = headerPoint()
-        var away = CGPoint(x: grab.x + 40, y: grab.y - 90)
+        var away = CGPoint(x: -80, y: grab.y)
         send(.leftMouseDown, grab, in: window)
         send(.leftMouseDragged, away, in: window)
         precondition(pane.alphaValue == 0, "Floating preview must replace source pane")
@@ -307,7 +307,7 @@ extension AppDelegate {
 
         // Escape cancels a floating drag, including its insertion preview and cursor state.
         grab = headerPoint()
-        away = CGPoint(x: grab.x + 40, y: grab.y - 90)
+        away = CGPoint(x: -80, y: grab.y)
         send(.leftMouseDown, grab, in: window)
         send(.leftMouseDragged, away, in: window)
         let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
@@ -318,12 +318,12 @@ extension AppDelegate {
         await pause()
         precondition(windowControllers.count == 1 && pane.alphaValue == 1, "Escape must cancel detach")
 
-        // Pull vertically, still inside the source window (also works when maximized).
+        // Leaving the source grid detaches; crossing terminal content does not.
         grab = headerPoint()
-        away = CGPoint(x: grab.x + 40, y: grab.y - 90)
+        away = CGPoint(x: -80, y: grab.y)
         send(.leftMouseDown, grab, in: window)
         send(.leftMouseDragged, away, in: window)
-        precondition(window.frame.contains(window.convertPoint(toScreen: away)), "Drop stays inside source")
+        precondition(!window.frame.contains(window.convertPoint(toScreen: away)), "Detach drop leaves source")
         await pause()
         snapshot(to: dir, step: 100)
         for panel in NSApp.windows where panel is NSPanel && panel.isVisible {
@@ -373,6 +373,69 @@ extension AppDelegate {
         send(.leftMouseUp, lowerHeader, in: window)
         await pause()
         precondition(source.panes[1] === pane, "Three-pane header drag must reorder into lower row")
+
+        // The reported three-pane case: crossing onto right-hand content swaps live
+        // neighbors during the drag, without detaching or waiting for mouse up.
+        let thirdPID = third.terminal.process.shellPid
+        let rightFrame = third.frame
+        let middle = source.grid.convert(CGPoint(x: rightFrame.midX, y: rightFrame.midY), to: nil)
+        send(.leftMouseDown, headerPoint(), in: window)
+        send(.leftMouseDragged, middle, in: window)
+        await pause()
+        precondition(third.frame.midX < rightFrame.minX && windowControllers.count == 1,
+                     "Body hover must preview right pane moving left")
+        let stableFrame = third.frame
+        for _ in 0..<20 { send(.leftMouseDragged, middle, in: window) }
+        await pause()
+        precondition(third.frame == stableFrame, "Stationary target must not oscillate during animation")
+        snapshot(to: dir, step: 104)
+        send(.leftMouseUp, middle, in: window)
+        precondition(source.panes[2] === pane && source.panes[1] === third, "Center drop must swap immediately")
+        // Begin the next drag immediately, before an animation completion could run.
+        let back = third.header.convert(CGPoint(x: 60, y: 10), to: nil)
+        send(.leftMouseDown, headerPoint(), in: window)
+        send(.leftMouseDragged, back, in: window)
+        send(.leftMouseUp, back, in: window)
+        precondition(source.panes[1] === pane, "Consecutive drags must not be blocked by settling")
+        alive()
+
+        // Bottom of the right pane changes [2,1] to [1,2].
+        let bottom = source.grid.convert(CGPoint(x: third.frame.midX, y: third.frame.minY + 30), to: nil)
+        send(.leftMouseDown, headerPoint(), in: window)
+        send(.leftMouseDragged, bottom, in: window)
+        await pause()
+        precondition(other.frame.height > third.frame.height * 1.5 && third.frame.midY > rightFrame.midY,
+                     "Bottom hover must preview a full-height left pane and top-right target")
+        snapshot(to: dir, step: 105)
+        send(.leftMouseUp, bottom, in: window)
+        precondition(source.grid.columnCounts == [1, 2] && source.panes[2] === pane,
+                     "Bottom drop must split the right column")
+        alive()
+
+        // Split back to the left, then above the right pane.
+        let leftBottom = source.grid.convert(CGPoint(x: other.frame.midX, y: other.frame.minY + 30), to: nil)
+        send(.leftMouseDown, headerPoint(), in: window)
+        send(.leftMouseDragged, leftBottom, in: window)
+        send(.leftMouseUp, leftBottom, in: window)
+        precondition(source.grid.columnCounts == [2, 1], "Reverse split must restore the left stack")
+        let top = source.grid.convert(CGPoint(x: third.frame.midX, y: third.frame.maxY - Theme.headerHeight - 20), to: nil)
+        send(.leftMouseDown, headerPoint(), in: window)
+        send(.leftMouseDragged, top, in: window)
+        send(.leftMouseUp, top, in: window)
+        precondition(source.grid.columnCounts == [1, 2] && source.panes[1] === pane,
+                     "Top drop must stack above the right pane")
+        await pause()
+        let savedFrames = source.panes.map(\.frame)
+        send(.leftMouseDown, headerPoint(), in: window)
+        send(.leftMouseDragged, leftBottom, in: window)
+        NSApp.sendEvent(escape)
+        send(.leftMouseUp, leftBottom, in: window)
+        await pause()
+        precondition(source.grid.columnCounts == [1, 2] && source.panes.map(\.frame) == savedFrames,
+                     "Escape must restore the order and split geometry")
+        precondition(third.terminal.process.running && third.terminal.process.shellPid == thirdPID,
+                     "Swapping and splitting must preserve the target shell")
+        alive()
         source.close(third)
         await pause()
 
@@ -411,6 +474,7 @@ extension AppDelegate {
         // choosing the drop target must not steal the drop from the window underneath.
         frontWindow.orderFront(nil)
         send(.leftMouseDown, frontGrab, in: frontWindow)
+        send(.leftMouseDragged, CGPoint(x: -80, y: frontGrab.y), in: frontWindow)
         send(.leftMouseDragged, hover, in: frontWindow)
         send(.leftMouseDragged, CGPoint(x: hover.x + 2, y: hover.y), in: frontWindow)
         precondition(source.grid.insertionIndex != nil && frontWindow.alphaValue == 0,
@@ -430,7 +494,7 @@ extension AppDelegate {
         await pause()
         alive()
         pane.terminal.send(txt: "printf 'DRAG_SHELL_ALIVE\\n'\n")
-        report(dir, "PASS: click, header routing, normal reorder, floating return, Escape, inside-window detach, single-pane reattach, insertion order, three-pane geometry, stacking, hidden targets, destination cancellation, capacity, same running shell pid=\(pid)")
+        report(dir, "PASS: click, header routing, body swap preview, stable target, consecutive drags, left/right/top splits, Escape geometry, outside-grid detach, single-pane reattach, insertion order, stacking, hidden targets, destination cancellation, capacity, same running shell pid=\(pid)")
         snapshot(to: dir, step: 103)
     }
 
@@ -471,7 +535,7 @@ extension AppDelegate {
             // Drawn as part of the window the terminal text comes out flipped, so paint each
             // terminal from its own capture on top.
             let scale = CGFloat(image.width) / view.bounds.width
-            for p in c.panes {
+            for p in c.panes where p.alphaValue > 0 {
                 let t = p.terminal
                 guard let tr = t.bitmapImageRepForCachingDisplay(in: t.bounds) else { continue }
                 t.cacheDisplay(in: t.bounds, to: tr)

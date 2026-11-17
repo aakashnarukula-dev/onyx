@@ -9,10 +9,17 @@ struct SessionStateTests {
             .init(frame: [10, 20, 1280, 820], panes: [
                 .init(cwd: "/Users/me/Developer", claudeSession: "2cba7231-0ccd-4566-9071-6e62a3c89441"),
                 .init(cwd: "/Users/me/Developer/app", claudeSession: nil),
-            ]),
+            ], columns: [2]),
         ])
         #expect(try state.save(paths) == true)
         #expect(SessionState.load(paths) == state)
+    }
+
+    @Test func legacyWindowWithoutColumnsStillLoads() throws {
+        let data = Data(#"{"windows":[{"frame":[0,0,800,600],"panes":[{"cwd":"/tmp"}]}]}"#.utf8)
+        let state = try JSONDecoder().decode(SessionState.self, from: data)
+        #expect(state.windows[0].columns == nil)
+        #expect(state.windows[0].panes.count == 1)
     }
 
     @Test func unchangedStateIsNotRewritten() throws {

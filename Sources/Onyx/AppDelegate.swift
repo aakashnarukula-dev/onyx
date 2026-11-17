@@ -207,13 +207,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         c.showWindow(nil)
         let panes = saved.panes.isEmpty ? [nil] : saved.panes.prefix(GridLayout.maxPanes).map { Optional($0) }
         panes.forEach { c.addPane(restoring: $0, assistant: settings.assistant) }
+        c.grid.restoreColumns(saved.columns)
     }
 
     func saveSession() {
         guard usesRealHome, !terminating else { return }
         let windows = controllers.compactMap { c -> SessionState.Window? in
             guard let f = c.window?.frame, !c.panes.isEmpty else { return nil }
-            return .init(frame: [f.minX, f.minY, f.width, f.height], panes: c.panes.map { $0.sessionPane(claude) })
+            return .init(frame: [f.minX, f.minY, f.width, f.height], panes: c.panes.map { $0.sessionPane(claude) },
+                         columns: c.grid.columnCounts)
         }
         try? SessionState(windows: windows).save(paths)
     }
