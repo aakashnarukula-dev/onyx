@@ -6,9 +6,18 @@ public enum PaneEnv {
     public static let claudeCommand = "claude --permission-mode auto"
 
     /// Full Access for both fresh Codex panes and restored conversations.
-    public static func codexCommand(resuming: Bool = false) -> String {
-        let command = resuming ? "codex resume" : "codex"
-        return "\(command) --sandbox danger-full-access --ask-for-approval never"
+    public static func codexCommand(resuming: Bool = false, sessionID: String? = nil) -> String {
+        let validID = sessionID.flatMap { UUID(uuidString: $0) != nil ? $0 : nil }
+        var command = resuming ? "codex resume" : "codex"
+        if resuming, let validID { command += " \(validID)" }
+        // Per-invocation title transport; leave the user's global Codex configuration alone.
+        command += " --sandbox danger-full-access --ask-for-approval never -c 'tui.terminal_title=[\"session-id\"]'"
+        // An empty/deleted chat may have emitted a title but have no resumable history.
+        // Fall back once on CLI failure, never on a user interrupt (130) or successful exit.
+        if resuming, validID != nil {
+            command += "; if [ \"$?\" -eq 1 ]; then \(codexCommand(resuming: true)); fi"
+        }
+        return command
     }
 
     /// Variables other terminals (or a Claude session) set to describe themselves. Passing them on

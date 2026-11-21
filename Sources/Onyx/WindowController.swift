@@ -270,7 +270,7 @@ func confirmClose(_ risks: [PaneView.CloseRisk], _ kind: CloseKind, name: String
     case .app:
         alert.messageText = "Quit Onyx?"
         if working > 0 { lines.append("Something is still working in \(n(working, "terminal", "terminals")); quitting stops it.") }
-        lines.append("Next launch can reopen Claude conversations and the Codex conversation picker.")
+        lines.append("Next launch can reopen your saved Claude and Codex conversations.")
     case .pane, .window:
         alert.messageText = kind == .window ? "Close this window?" : name.map { "Close \($0)?" } ?? "Close this terminal?"
         if working > 0 {

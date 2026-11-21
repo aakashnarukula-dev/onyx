@@ -64,10 +64,17 @@ Codex starts with **Full Access** in every new and restored terminal
 (`--sandbox danger-full-access --ask-for-approval never`), using your existing login.
 It can edit files outside the workspace and access the internet without approval.
 
-Saved Codex panes reopen `codex resume --sandbox danger-full-access --ask-for-approval never`
-in their saved folder, where you choose a conversation.
-Onyx does not yet track the exact Codex conversation ID. Claude's automatic conversation
-restore remains unchanged. File drops paste paths; image attachment behavior depends on the CLI.
+Saved Codex panes reopen `codex resume <id> --sandbox danger-full-access --ask-for-approval never`
+in their saved folder, returning each pane to its own conversation, even when several panes
+share a folder. Onyx captures Codex's session ID through its terminal title using a
+per-launch `tui.terminal_title` override; your global Codex settings stay unchanged. The header
+still shows `codex`, rather than the ID. Shortened IDs are resolved against Codex's own local
+snapshot filenames and session index, only when there is a unique match.
+Older saved panes without IDs, unsupported CLI versions, or conversations whose ID cannot
+be resolved still open the conversation picker. If an exact resume fails (for example, an empty
+or deleted chat), Onyx falls back to the picker once. Choose the conversation once in the updated
+app so Onyx can remember it. Claude's automatic conversation restore remains unchanged.
+File drops paste paths; image attachment behavior depends on the CLI.
 
 ## Install
 

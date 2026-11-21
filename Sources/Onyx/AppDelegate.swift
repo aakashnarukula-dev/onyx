@@ -188,7 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Reopen your last terminals?"
-        alert.informativeText = "\(n) saved assistant terminals from last time. Claude resumes its conversation; Codex opens its conversation picker in the saved folder."
+        alert.informativeText = "\(n) saved assistant terminals from last time. Each resumes its saved conversation. Older Codex terminals without a saved conversation ID open the conversation picker."
             + " Start Fresh opens one new terminal. You can still use claude --resume or codex resume later."
         alert.addButton(withTitle: "Reopen")
         alert.addButton(withTitle: "Start Fresh")
@@ -230,10 +230,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WindowControllerDelega
             var isDir: ObjCBool = false
             let folderThere = FileManager.default.fileExists(atPath: restoring.cwd, isDirectory: &isDir) && isDir.boolValue
             if folderThere { cwd = restoring.cwd }
-            if selected == .codex { command = PaneEnv.codexCommand(resuming: true) }
+            if selected == .codex {
+                command = PaneEnv.codexCommand(resuming: true, sessionID: restoring.codexSession)
+                resuming = restoring
+            }
             // Back into the same conversation. Claude finds it by folder, so only in its own folder;
             // one that never got a message starts fresh.
-            if folderThere, let id = restoring.claudeSession, claude.hasTranscript(id: id) {
+            if selected == .claude, folderThere, let id = restoring.claudeSession, claude.hasTranscript(id: id) {
                 command = ClaudeSessions.resumeCommand(id: id)
                 resuming = restoring
             }

@@ -1,26 +1,29 @@
 import Foundation
 
 /// What was open (`session.json`): each window's frame and, per terminal, its folder and the
-/// Claude conversation running there. Kept current while Onyx runs, so a force quit or crash
+/// assistant conversation running there. Kept current while Onyx runs, so a force quit or crash
 /// leaves it behind for the next launch to reopen.
 public struct SessionState: Codable, Equatable, Sendable {
     public struct Pane: Codable, Equatable, Sendable {
         public var cwd: String
         public var claudeSession: String?
+        public var codexSession: String?
         public var assistant: Assistant?
 
-        public init(cwd: String, claudeSession: String?, assistant: Assistant? = .claude) {
+        public init(cwd: String, claudeSession: String?, assistant: Assistant? = .claude, codexSession: String? = nil) {
             self.cwd = cwd
             self.claudeSession = claudeSession
             self.assistant = assistant
+            self.codexSession = codexSession
         }
 
-        private enum CodingKeys: String, CodingKey { case cwd, claudeSession, assistant }
+        private enum CodingKeys: String, CodingKey { case cwd, claudeSession, codexSession, assistant }
 
         public init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
             cwd = try values.decode(String.self, forKey: .cwd)
             claudeSession = try values.decodeIfPresent(String.self, forKey: .claudeSession)
+            codexSession = try values.decodeIfPresent(String.self, forKey: .codexSession)
             // Old sessions omitted this key for Claude; explicit null now means a plain shell.
             assistant = values.contains(.assistant)
                 ? try values.decodeIfPresent(Assistant.self, forKey: .assistant) : .claude
@@ -30,6 +33,7 @@ public struct SessionState: Codable, Equatable, Sendable {
             var values = encoder.container(keyedBy: CodingKeys.self)
             try values.encode(cwd, forKey: .cwd)
             try values.encodeIfPresent(claudeSession, forKey: .claudeSession)
+            try values.encodeIfPresent(codexSession, forKey: .codexSession)
             try values.encode(assistant, forKey: .assistant)
         }
     }

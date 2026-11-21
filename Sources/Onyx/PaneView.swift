@@ -175,11 +175,16 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         terminal.send(txt: bracketed ? "\u{1b}[200~" + text + "\u{1b}[201~" : text)
     }
 
-    /// What to reopen this terminal as: the Claude conversation running in it (in Claude's
+    /// What to reopen this terminal as: the assistant conversation running in it (in its
     /// folder), else the shell's folder.
     func sessionPane(_ claude: ClaudeSessions) -> SessionState.Pane {
         let shell = terminal.process.shellPid
         guard !closed, terminal.process.running, shell > 0 else { return resuming ?? .init(cwd: cwd, claudeSession: nil, assistant: assistant) }
+        if let title = codexTitle, let pid = codexOwner, kill(pid, 0) == 0 {
+            if codexSession == nil { codexSession = Self.codex.sessionID(fromTitle: title) }
+            return .init(cwd: currentDirectory(of: pid) ?? cwd, claudeSession: nil,
+                         assistant: .codex, codexSession: codexSession)
+        }
         for pid in childPids(of: shell) {
             if let s = claude.running(pid: pid) {
                 resuming = nil
@@ -192,12 +197,16 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
         return resuming ?? .init(cwd: currentDirectory(of: shell) ?? cwd, claudeSession: nil, assistant: assistant)
     }
 
-    /// The saved conversation this pane was reopened to resume, until Claude is seen running.
+    /// The saved conversation this pane was reopened to resume, until its assistant is identified.
     var assistant: Assistant? = .claude
     var resuming: SessionState.Pane?
 
     /// Claude's own records of its sessions, shared by every pane.
     static let claude = ClaudeSessions()
+    static let codex = CodexSessions()
+    private var codexTitle: String?
+    private var codexOwner: pid_t?
+    private(set) var codexSession: String?
 
     /// What closing the pane would cut off, worst first.
     enum CloseRisk: Comparable {
@@ -254,8 +263,21 @@ final class PaneView: NSView, @preconcurrency LocalProcessTerminalViewDelegate {
     func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
 
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
-        programTitle = title
-        titleOwner = foregroundPid
+        let pid = foregroundPid
+        if CodexSessions.isSessionTitle(title), let pid,
+           let owner = ([pid] + childPids(of: pid)).first(where: { commandName($0) == "codex" || processName($0) == "codex" }) {
+            codexTitle = title
+            codexOwner = owner
+            let previous = codexSession ?? resuming?.codexSession
+            codexSession = Self.codex.sessionID(fromTitle: title)
+                ?? previous.flatMap { CodexSessions.title(title, matches: $0) ? $0 : nil }
+            resuming = nil
+            assistant = .codex
+            programTitle = "codex"
+        } else {
+            programTitle = title
+        }
+        titleOwner = pid
         refreshTitle()
     }
 

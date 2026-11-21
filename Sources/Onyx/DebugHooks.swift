@@ -38,6 +38,7 @@ enum DebugHooks {
             case "b": app.newCodexPane(nil)
             case "w": if let k = Int(step.dropFirst()) { app.closePane(at: k) }
             case "s": app.snapshot(to: dir, step: i)
+            case "e": app.checkCodexSessions(dir)
             case "t": if let k = Int(step.dropFirst()), let text = env["ONYX_TYPE_\(k)"] { app.type(text, intoPane: k) }
             case "k":  // k<pane>.<text id>: type $ONYX_TYPE_<text id> into <pane> as key events
                 let parts = step.dropFirst().split(separator: ".")
@@ -91,6 +92,23 @@ enum DebugHooks {
 }
 
 extension AppDelegate {
+    /// Real-CLI regression: validate identities observed over the PTY, not just restored state.
+    func checkCodexSessions(_ dir: String) {
+        guard let expected = DebugHooks.env["ONYX_EXPECT_CODEX_IDS"]?.split(separator: ",").map(String.init) else {
+            preconditionFailure("Codex check needs ONYX_EXPECT_CODEX_IDS")
+        }
+        let panes = windowControllers.flatMap(\.panes)
+        precondition(panes.map(\.codexSession) == expected.map(Optional.init),
+                     "Every pane must observe its own Codex conversation ID")
+        precondition(panes.allSatisfy { $0.headerTitle == "codex" }, "Conversation IDs must not become pane labels")
+        precondition(panes.allSatisfy { !$0.visibleText().contains { $0.contains("Resume a previous session") } },
+                     "Known conversations must bypass the picker")
+        saveSession()
+        precondition(SessionState.load(paths)?.windows.flatMap(\.panes).map(\.codexSession) == expected.map(Optional.init),
+                     "Observed Codex identities must survive session persistence")
+        report(dir, "PASS: \(windowControllers.count) windows, \(panes.count) distinct Codex sessions observed over PTY, picker bypassed, IDs persisted")
+    }
+
     func closePane(at index: Int) {
         guard let c = windowControllers.last, c.panes.indices.contains(index) else { return }
         c.close(c.panes[index])

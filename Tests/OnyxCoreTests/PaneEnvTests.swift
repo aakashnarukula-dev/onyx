@@ -80,7 +80,7 @@ struct PaneEnvTests {
             #expect(bash.args[3].contains("command -v \(assistant.rawValue)"))
             #expect(bash.args[3].contains(assistant.command))
         }
-        #expect(Assistant.codex.command == "codex --sandbox danger-full-access --ask-for-approval never")
+        #expect(Assistant.codex.command == "codex --sandbox danger-full-access --ask-for-approval never -c 'tui.terminal_title=[\"session-id\"]'")
         #expect(Assistant.claude.command == "claude --permission-mode auto")
     }
 
@@ -88,11 +88,34 @@ struct PaneEnvTests {
         for resuming in [false, true] {
             let command = PaneEnv.codexCommand(resuming: resuming)
             let expected = resuming ? "codex resume" : "codex"
-            #expect(command == "\(expected) --sandbox danger-full-access --ask-for-approval never")
+            #expect(command == "\(expected) --sandbox danger-full-access --ask-for-approval never -c 'tui.terminal_title=[\"session-id\"]'")
             let zsh = PaneEnv.launch(shell: "/bin/zsh", firstCommand: command, zdotdir: "/z", userZdotdir: nil)
             #expect(zsh.env["ONYX_FIRST_COMMAND"] == command)
             let bash = PaneEnv.launch(shell: "/bin/bash", firstCommand: command, zdotdir: "/z", userZdotdir: nil)
             #expect(bash.args[3].contains("then \(command);"))
+        }
+    }
+
+    @Test func codexRestoresExactIDAndNeverInterpolatesInvalidIDs() {
+        let id = "01a1f325-83ee-7cf0-8f86-3035e0d4af5d"
+        #expect(PaneEnv.codexCommand(resuming: true, sessionID: id).hasPrefix("codex resume \(id) --sandbox"))
+        for invalid in ["$(touch /tmp/injected)", "x; exit", "--last", ""] {
+            #expect(PaneEnv.codexCommand(resuming: true, sessionID: invalid) == PaneEnv.codexCommand(resuming: true))
+        }
+    }
+
+    @Test func failedExactResumeFallsBackOnceButSuccessAndInterruptDoNot() {
+        let id = "01a1f325-83ee-7cf0-8f86-3035e0d4af5d"
+        let command = PaneEnv.codexCommand(resuming: true, sessionID: id)
+        for shell in ["/bin/zsh", "/bin/bash"] {
+            for status in [0, 1, 130] {
+                let stub = "codex() { printf '%s\\n' \"$*\"; if [ \"$2\" = '\(id)' ]; then return \(status); fi; return 0; }; "
+                let result = Shell.run(shell, ["-c", stub + command])
+                let calls = result.out.split(separator: "\n")
+                #expect(calls.count == (status == 1 ? 2 : 1))
+                #expect(calls.first?.hasPrefix("resume \(id) ") == true)
+                if status == 1 { #expect(calls.last?.hasPrefix("resume --sandbox") == true) }
+            }
         }
     }
 
